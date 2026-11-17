@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vigil focus controls</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="brand-row">
+        <img src="icons/vigil-32.png" alt="" width="28" height="28" />
+        <div><p class="eyebrow">YOUR FOCUS, YOUR RULES</p><h1>Vigil</h1></div>
+        <span id="live-dot" class="live-dot" aria-label="Session inactive"></span>
+      </header>
+
+      <section class="session-card" aria-live="polite">
+        <p id="session-state" class="eyebrow">READY WHEN YOU ARE</p>
+        <p id="timer" class="timer">25:00</p>
+        <p id="task-copy" class="task-copy">Choose a few sites, then start a session.</p>
+        <div id="session-actions" class="session-actions">
+          <label class="field-label" for="task">What are you focusing on? <span>Optional</span></label>
+          <input id="task" maxlength="80" placeholder="Write the project brief" />
+          <label class="field-label" for="duration">Focus length</label>
+          <select id="duration">
+            <option value="25">25 minutes</option>
+            <option value="50">50 minutes</option>
+            <option value="90">90 minutes</option>
+          </select>
+          <button id="start" class="primary-button" type="button">Start focus</button>
+        </div>
+        <button id="stop" class="quiet-button hidden" type="button">End session</button>
+      </section>
+
+      <section class="sites-section">
+        <div class="section-heading"><h2>Sites to pause</h2><span id="site-count">0</span></div>
+        <form id="site-form" class="add-form">
+          <label class="visually-hidden" for="domain">Add a site domain</label>
+          <input id="domain" placeholder="youtube.com" autocomplete="off" spellcheck="false" />
+          <button type="submit" aria-label="Add site">Add</button>
+        </form>
+        <p id="permission-note" class="permission-note">Vigil asks for access only when you add a site.</p>
+        <ul id="sites" class="site-list"></ul>
+        <p id="empty-sites" class="empty-sites">No sites added yet. Start with one that often pulls you away.</p>
+      </section>
+
+      <footer class="stats-row" aria-label="On-device session summary">
+        <div><strong id="pause-count">0</strong><span>pauses</span></div>
+        <div><strong id="override-count">0</strong><span>overrides</span></div>
+        <p>Saved on this device</p>
+        <button id="clear-data" class="clear-button" type="button">Clear data</button>
+      </footer>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

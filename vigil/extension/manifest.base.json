@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Vigil — Focus with intention",
+  "version": "0.1.0",
+  "description": "Pause selected websites during focus time. Your rules and session data stay on this device.",
+  "permissions": ["storage", "alarms", "declarativeNetRequest"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "action": {
+    "default_title": "Vigil focus controls",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/vigil-16.png",
+      "32": "icons/vigil-32.png",
+      "48": "icons/vigil-48.png",
+      "128": "icons/vigil-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/vigil-16.png",
+    "32": "icons/vigil-32.png",
+    "48": "icons/vigil-48.png",
+    "128": "icons/vigil-128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["pause.html", "pause.css", "pause.js"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ]
+}

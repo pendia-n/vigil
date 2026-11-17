@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A quiet moment — Vigil</title>
+    <link rel="stylesheet" href="pause.css" />
+  </head>
+  <body>
+    <main class="pause-card">
+      <img class="mark" src="icons/vigil-48.png" alt="Vigil" width="42" height="42" />
+      <p class="eyebrow">A SMALL PAUSE</p>
+      <h1>Is this where you meant to be?</h1>
+      <p class="body-copy">You chose to pause <strong id="site">this site</strong> while you focus.</p>
+      <div class="focus-note" id="focus-note">Your focus session is active.</div>
+      <div class="timer-row"><span>Time left</span><strong id="timer">--:--</strong></div>
+      <button id="return" class="primary" type="button">Back to my task</button>
+      <button id="wait" class="secondary" type="button">Wait, then open this site</button>
+      <button id="continue" class="secondary" type="button">Continue to this site for 5 minutes</button>
+      <p id="error" role="status" aria-live="polite"></p>
+      <p class="privacy-note">Your site list and session stay on this device. You can always choose to continue.</p>
+    </main>
+    <script src="pause.js"></script>
+  </body>
+</html>
