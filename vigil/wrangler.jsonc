@@ -12,6 +12,14 @@
 		"not_found_handling": "single-page-application",
 		"run_worker_first": ["/api/*"]
 	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "vigil-accounts",
+			"database_id": "afe0f088-65f4-4998-aabf-0242a70389b1",
+			"migrations_dir": "migrations"
+		}
+	],
 	"observability": {
 		"enabled": true
 	},
