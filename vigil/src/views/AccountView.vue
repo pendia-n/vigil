@@ -1,7 +1,6 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { renderFocusSong } from '../focus-song.js'
 
 const mode = ref('login')
 const account = ref(null)
@@ -13,29 +12,6 @@ const resetCode = ref('')
 const message = ref('')
 const error = ref('')
 const busy = ref(false)
-const musicBusy = ref(false)
-const songUrl = ref('')
-
-function clearSong() {
-  if (songUrl.value) URL.revokeObjectURL(songUrl.value)
-  songUrl.value = ''
-}
-
-async function generateSong() {
-  error.value = ''
-  musicBusy.value = true
-  try {
-    const { seed } = await api('/api/music/weekly', {})
-    const song = await renderFocusSong(seed)
-    clearSong()
-    songUrl.value = URL.createObjectURL(song)
-  } catch (cause) {
-    error.value = cause.message || 'Could not generate your focus song.'
-  } finally {
-    musicBusy.value = false
-  }
-}
-
 async function api(path, data) {
   const response = await fetch(path, {
     method: data ? 'POST' : 'GET',
@@ -152,11 +128,10 @@ async function requestRefund() {
 }
 
 async function signOut() {
-  try { await api('/api/auth/logout', {}) } finally { clearSong(); account.value = null; message.value = 'You are signed out.' }
+  try { await api('/api/auth/logout', {}) } finally { account.value = null; message.value = 'You are signed out.' }
 }
 
 onMounted(loadAccount)
-onUnmounted(clearSong)
 </script>
 
 <template>
@@ -186,15 +161,6 @@ onUnmounted(clearSong)
         <button v-if="account.plan !== 'plus'" class="action-button" type="button" :disabled="busy" @click="beginCheckout">Subscribe to Plus — $4.99/month</button>
         <button v-else class="action-button" type="button" :disabled="busy" @click="openPortal">Manage subscription</button>
         <button v-if="account.plan === 'plus' || account.refundPending" class="text-button" type="button" :disabled="busy" @click="requestRefund">{{ account.refundPending ? 'Retry 30% refund and cancellation' : 'Request 30% refund and cancel' }}</button>
-        <details v-if="account.plan === 'plus'" class="password-section">
-          <summary>Weekly focus song</summary>
-          <p class="hint">Generate a 30-second instrumental. Your next song becomes available seven days after you first generate this one.</p>
-          <button class="action-button" type="button" :disabled="musicBusy" @click="generateSong">{{ musicBusy ? 'Generating…' : 'Generate this week’s song' }}</button>
-          <template v-if="songUrl">
-            <a class="text-button" :href="songUrl" download="vigil-weekly-song.wav">Download your focus song</a>
-            <p class="hint">In the Vigil extension, open “Use my weekly Plus song” and import the file.</p>
-          </template>
-        </details>
         <details class="password-section">
           <summary>Change password</summary>
           <form @submit.prevent="changePassword">

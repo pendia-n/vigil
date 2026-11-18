@@ -11,17 +11,16 @@ function playSound() {
 }
 
 async function setupSound() {
-	const { focusSound, focusSong, loopSong } = await api.storage.local.get(["focusSound", "focusSong", "loopSong"]);
+	const { focusSound } = await api.storage.local.get("focusSound");
 	if (!focusSound || sessionEndsAt <= Date.now()) return;
-	focusAudio = new Audio(focusSong || api.runtime.getURL("focus-cue.mp3"));
+	focusAudio = new Audio(api.runtime.getURL("focus-cue.mp3"));
 	focusAudio.volume = 0.4;
-	focusAudio.loop = Boolean(focusSong && loopSong);
 	focusAudio.addEventListener("play", () => { soundButton.textContent = "Stop focus sound"; });
 	for (const event of ["pause", "ended"]) {
 		focusAudio.addEventListener(event, () => { soundButton.textContent = "Play focus sound"; });
 	}
 	soundButton.hidden = false;
-	const allowed = focusSong || (await api.runtime.sendMessage({ type: "claim-focus-cue" }))?.play;
+	const allowed = (await api.runtime.sendMessage({ type: "claim-focus-cue" }))?.play;
 	if (allowed && sessionEndsAt > Date.now()) playSound();
 }
 
