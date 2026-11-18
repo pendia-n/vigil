@@ -1,5 +1,6 @@
 import { handleAuth } from "./auth.js";
 import { handleBilling, handleStripeWebhook } from "./billing.js";
+import { handleWeeklySong } from "./music.js";
 
 function withCors(response, request, env) {
 	const origin = request.headers.get("origin");
@@ -27,6 +28,8 @@ export default {
 				response = Response.json({ name: "Vigil", status: "ok", accounts: Boolean(env.DB && env.JWT_SECRET), billing: Boolean(env.DB && env.JWT_SECRET && env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET) });
 			} else if (url.pathname === "/api/stripe/webhook" && request.method === "POST") {
 				response = await handleStripeWebhook(request, env);
+			} else if (url.pathname === "/api/music/weekly" && request.method === "POST") {
+				response = await handleWeeklySong(request, env);
 			} else if (url.pathname.startsWith("/api/auth/")) {
 				response = await handleAuth(request, env, url.pathname);
 			} else if (url.pathname.startsWith("/api/billing/")) {

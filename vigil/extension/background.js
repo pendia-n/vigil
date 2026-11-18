@@ -200,10 +200,25 @@ async function allowTargetForTab(target, tabId) {
 	return { ok: true };
 }
 
+let cueClaim = Promise.resolve(false);
+
+function claimFocusCue() {
+	const claim = cueClaim.catch(() => {}).then(async () => {
+		const { session, cuePlayedAt } = await api.storage.local.get(["session", "cuePlayedAt"]);
+		if (!session || session.endsAt <= Date.now() || cuePlayedAt === session.startedAt) return false;
+		await api.storage.local.set({ cuePlayedAt: session.startedAt });
+		return true;
+	});
+	cueClaim = claim;
+	return claim;
+}
+
 async function handleMessage(message, sender) {
 	switch (message && message.type) {
 		case "get-state":
 			return getState();
+		case "claim-focus-cue":
+			return { play: await claimFocusCue() };
 		case "add-domain":
 			return addDomain(message.domain);
 		case "remove-domain":

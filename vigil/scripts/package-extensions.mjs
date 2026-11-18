@@ -8,7 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const source = join(root, 'extension')
 const downloads = join(root, 'public', 'downloads')
 const baseManifest = JSON.parse(readFileSync(join(source, 'manifest.base.json'), 'utf8'))
-const appFiles = ['background.js', 'popup.html', 'popup.css', 'popup.js', 'pause.html', 'pause.css', 'pause.js']
+const appFiles = ['background.js', 'popup.html', 'popup.css', 'popup.js', 'pause.html', 'pause.css', 'pause.js', 'focus-cue.mp3']
 
 mkdirSync(downloads, { recursive: true })
 for (const archive of ['vigil-chrome-brave.zip', 'vigil-firefox.zip']) {

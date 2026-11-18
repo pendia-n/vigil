@@ -3,6 +3,40 @@ const target = location.hash.length > 1 ? location.href.slice(location.href.inde
 let sessionEndsAt = null;
 let waitUntilSessionEnds = false;
 let endNavigationPending = false;
+let focusAudio;
+const soundButton = document.querySelector("#focus-sound");
+
+function playSound() {
+	focusAudio.play().catch(() => { soundButton.textContent = "Play focus sound"; });
+}
+
+async function setupSound() {
+	const { focusSound, focusSong, loopSong } = await api.storage.local.get(["focusSound", "focusSong", "loopSong"]);
+	if (!focusSound || sessionEndsAt <= Date.now()) return;
+	focusAudio = new Audio(focusSong || api.runtime.getURL("focus-cue.mp3"));
+	focusAudio.volume = 0.4;
+	focusAudio.loop = Boolean(focusSong && loopSong);
+	focusAudio.addEventListener("play", () => { soundButton.textContent = "Stop focus sound"; });
+	for (const event of ["pause", "ended"]) {
+		focusAudio.addEventListener(event, () => { soundButton.textContent = "Play focus sound"; });
+	}
+	soundButton.hidden = false;
+	const allowed = focusSong || (await api.runtime.sendMessage({ type: "claim-focus-cue" }))?.play;
+	if (allowed && sessionEndsAt > Date.now()) playSound();
+}
+
+soundButton.addEventListener("click", () => {
+	if (!focusAudio || sessionEndsAt <= Date.now()) return;
+	if (focusAudio.paused) playSound();
+	else focusAudio.pause();
+});
+window.addEventListener("pagehide", () => focusAudio?.pause());
+api.storage.onChanged.addListener((changes, area) => {
+	if (area === "local" && (changes.session && !changes.session.newValue || changes.focusSound && !changes.focusSound.newValue)) {
+		focusAudio?.pause();
+		soundButton.hidden = true;
+	}
+});
 
 function setTargetLabel() {
 	try {
@@ -19,6 +53,8 @@ function renderTimer() {
 	const seconds = String(remaining % 60).padStart(2, "0");
 	document.querySelector("#timer").textContent = sessionEndsAt ? minutes + ":" + seconds : "Ended";
 	if (!sessionEndsAt || remaining === 0) {
+		focusAudio?.pause();
+		soundButton.hidden = true;
 		document.querySelector("#focus-note").textContent = "Your focus session has ended. This site is available again.";
 		document.querySelector("#continue").disabled = false;
 		document.querySelector("#wait").disabled = true;
@@ -49,6 +85,7 @@ api.runtime.sendMessage({ type: "get-state" }).then(state => {
 	if (state && state.session) {
 		sessionEndsAt = state.session.endsAt;
 		if (state.session.taskLabel) document.querySelector("#focus-note").textContent = "You planned to work on: " + state.session.taskLabel;
+		setupSound().catch(() => {});
 	}
 	renderTimer();
 }).catch(() => renderTimer());

@@ -120,5 +120,51 @@ $("#clear-data").addEventListener("click", async () => {
 	} catch (error) { showMessage(error.message); }
 });
 
+const sound = $("#sound");
+const loopSong = $("#loop-song");
+api.storage.local.get(["focusSound", "loopSong"]).then(settings => {
+	sound.checked = Boolean(settings.focusSound);
+	loopSong.checked = Boolean(settings.loopSong);
+}).catch(error => showMessage(error.message));
+
+sound.addEventListener("change", () => {
+	api.storage.local.set({ focusSound: sound.checked }).catch(error => showMessage(error.message));
+});
+loopSong.addEventListener("change", () => {
+	api.storage.local.set({ loopSong: loopSong.checked }).catch(error => showMessage(error.message));
+});
+
+$("#song-file").addEventListener("change", event => {
+	const file = event.target.files[0];
+	if (!file) return;
+	event.target.value = "";
+	if (!/\.(mp3|wav)$/i.test(file.name) || !file.size || file.size > 6 * 1024 * 1024) {
+		showMessage("Choose an MP3 or WAV file under 6 MB.");
+		return;
+	}
+	const type = /\.wav$/i.test(file.name) ? "audio/wav" : "audio/mpeg";
+	const reader = new FileReader();
+	reader.onerror = () => showMessage("Could not read this audio file.");
+	reader.onload = async () => {
+		try {
+			await api.storage.local.set({ focusSong: "data:" + type + ";base64," + reader.result.split(",")[1], focusSound: true });
+			sound.checked = true;
+			showMessage("Your song is ready for the next pause.");
+		} catch { showMessage("Could not save this song."); }
+	};
+	reader.readAsDataURL(file);
+});
+$("#remove-song").addEventListener("click", async () => {
+	try {
+		await api.storage.local.remove("focusSong");
+		showMessage("Vigil will use the bundled sound.");
+	} catch (error) { showMessage(error.message); }
+});
+api.storage.onChanged.addListener((changes, area) => {
+	if (area !== "local") return;
+	if (changes.focusSound) sound.checked = Boolean(changes.focusSound.newValue);
+	if (changes.loopSong) loopSong.checked = Boolean(changes.loopSong.newValue);
+});
+
 refresh();
 setInterval(() => { if (currentState.session) render(); }, 1000);

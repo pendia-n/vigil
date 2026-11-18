@@ -23,6 +23,12 @@ button, input, select { font: inherit; }
 .field-label span { color: #80798c; }
 input, select { width: 100%; min-height: 38px; border: 1px solid #3b3746; border-radius: 9px; padding: 0 11px; color: #f5f1f8; background: #14131b; outline: none; }
 input:focus, select:focus { border-color: #c75bb6; box-shadow: 0 0 0 3px #c75bb622; }
+.sound-choice { display: flex; align-items: center; gap: 7px; }
+.sound-choice input { width: auto; min-height: 0; accent-color: #e9a1d2; }
+.song-settings { font-size: 12px; }
+.song-settings summary { cursor: pointer; }
+.song-settings a { display: block; color: #efa0ce; margin: 8px 0; }
+.song-settings input[type=file] { min-height: 0; padding: 6px; margin: 4px 0 8px; }
 .primary-button { width: 100%; min-height: 40px; margin-top: 14px; border: 0; border-radius: 10px; color: #160e19; background: linear-gradient(110deg, #f49acb, #b7a5ff); font-size: 12px; font-weight: 750; cursor: pointer; }
 .primary-button:disabled { cursor: not-allowed; opacity: .5; }
 .quiet-button { border: 0; padding: 0; color: #c9a5c8; background: transparent; font-size: 11px; cursor: pointer; }
