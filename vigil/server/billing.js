@@ -9,8 +9,7 @@ function stripeClient(env) {
 	if (!env.STRIPE_SECRET_KEY) throw new Error("Stripe is not configured.");
 	return new Stripe(env.STRIPE_SECRET_KEY, {
 		apiVersion: "2026-09-30.endive",
-		httpClient: Stripe.createFetchHttpClient(),
-		cryptoProvider: Stripe.createSubtleCryptoProvider()
+		httpClient: Stripe.createFetchHttpClient()
 	});
 }
 
@@ -39,22 +38,35 @@ export async function handleBilling(request, env, pathname) {
 	const origin = new URL(request.url).origin;
 
 	if (pathname === "/api/billing/checkout" && request.method === "POST") {
-		if (!env.STRIPE_PRICE_ID) return json({ error: "Subscription pricing is not configured yet." }, 503);
+		if (!env.STRIPE_WEBHOOK_SECRET) return json({ error: "Stripe webhook is not configured yet." }, 503);
 		if (account.subscription_status === "active" && Number(account.subscription_period_end || 0) > Date.now()) {
 			return json({ error: "Your Plus subscription is already active." }, 409);
 		}
-		const customerId = await getOrCreateCustomer(stripe, env, account);
-		const session = await stripe.checkout.sessions.create({
-			mode: "subscription",
-			customer: customerId,
-			client_reference_id: account.id,
-			line_items: [{ price: env.STRIPE_PRICE_ID, quantity: 1 }],
-			subscription_data: { metadata: { vigil_account_id: account.id } },
-			success_url: `${origin}/account?checkout=success`,
-			cancel_url: `${origin}/account?checkout=cancelled`,
-			integration_identifier: integrationLabel()
-		});
-		return json({ url: session.url });
+		try {
+			const customerId = await getOrCreateCustomer(stripe, env, account);
+			const session = await stripe.checkout.sessions.create({
+				mode: "subscription",
+				customer: customerId,
+				client_reference_id: account.id,
+				line_items: [{
+					price_data: {
+						currency: "usd",
+						unit_amount: 499,
+						recurring: { interval: "month" },
+						product_data: { name: "Vigil Plus" }
+					},
+					quantity: 1
+				}],
+				subscription_data: { metadata: { vigil_account_id: account.id } },
+				success_url: `${origin}/account?checkout=success`,
+				cancel_url: `${origin}/account?checkout=cancelled`,
+				integration_identifier: integrationLabel()
+			});
+			return json({ url: session.url });
+		} catch (error) {
+			console.error("Vigil Checkout creation failed", { type: error?.type, code: error?.code, param: error?.param, requestId: error?.requestId });
+			return json({ error: "Couldn’t open Stripe Checkout. Please try again." }, 502);
+		}
 	}
 
 	if (pathname === "/api/billing/portal" && request.method === "POST") {
@@ -122,7 +134,7 @@ async function applyEvent(event, env, stripe) {
 		const account = await env.DB.prepare("SELECT id FROM accounts WHERE stripe_customer_id = ?").bind(customerId).first();
 		if (!account) return;
 		const status = object.status === "active" || object.status === "trialing" ? "active" : object.status;
-		const periodEnd = Number(object.current_period_end || 0) * 1000;
+		const periodEnd = Number(object.items?.data?.[0]?.current_period_end ?? object.current_period_end ?? 0) * 1000;
 		await env.DB.prepare("UPDATE accounts SET stripe_subscription_id = ?, subscription_status = ?, subscription_period_end = ?, updated_at = ? WHERE id = ?")
 			.bind(object.id, status, periodEnd, Date.now(), account.id).run();
 		return;

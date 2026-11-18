@@ -24,7 +24,7 @@ export default {
 			if (request.method === "OPTIONS") {
 				response = new Response(null, { status: 204 });
 			} else if (url.pathname === "/api/health" && request.method === "GET") {
-				response = Response.json({ name: "Vigil", status: "ok", accounts: Boolean(env.DB), billing: Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_PRICE_ID) });
+				response = Response.json({ name: "Vigil", status: "ok", accounts: Boolean(env.DB && env.JWT_SECRET), billing: Boolean(env.DB && env.JWT_SECRET && env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET) });
 			} else if (url.pathname === "/api/stripe/webhook" && request.method === "POST") {
 				response = await handleStripeWebhook(request, env);
 			} else if (url.pathname.startsWith("/api/auth/")) {

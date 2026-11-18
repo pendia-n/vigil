@@ -2,7 +2,8 @@ const encoder = new TextEncoder();
 const SESSION_COOKIE = "vigil_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 const RESET_LIMIT_MS = 60 * 60 * 24 * 1000;
-const PASSWORD_ITERATIONS = 310000;
+// Cloudflare Workers WebCrypto currently caps PBKDF2 at 100,000 iterations.
+const PASSWORD_ITERATIONS = 100000;
 const JWT_ISSUER = "vigil";
 const JWT_AUDIENCE = "vigil";
 
@@ -102,7 +103,7 @@ export async function authenticatedAccount(request, env) {
 	const tokenHash = await digest(token);
 	const now = Date.now();
 	const result = await env.DB.prepare(
-		`SELECT a.id, a.username, a.subscription_status, a.subscription_period_end
+		`SELECT a.id, a.username, a.subscription_status, a.subscription_period_end, a.stripe_customer_id, a.stripe_subscription_id
 		 FROM sessions s JOIN accounts a ON a.id = s.account_id
 		 WHERE s.token_hash = ? AND s.account_id = ? AND s.expires_at > ?`
 	).bind(tokenHash, claims.sub, now).first();
@@ -171,13 +172,27 @@ export async function handleAuth(request, env, pathname) {
 		const id = crypto.randomUUID();
 		const salt = randomToken(16);
 		const recoveryCode = randomRecoveryCode();
+		let storedPasswordHash;
+		let storedRecoveryCodeHash;
+		try {
+			storedPasswordHash = await passwordHash(password, salt);
+			storedRecoveryCodeHash = await digest(`${id}:${recoveryCode}`);
+		} catch (error) {
+			console.error("Vigil signup credential hashing failed", error);
+			return json({ error: "Secure signup is temporarily unavailable. Please try again." }, 500);
+		}
 		try {
 			await env.DB.prepare(
 				`INSERT INTO accounts (id, username, password_salt, password_hash, recovery_code_hash, password_changed_at, created_at, updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-			).bind(id, username, salt, await passwordHash(password, salt), await digest(`${id}:${recoveryCode}`), now, now, now).run();
-		} catch {
-			return json({ error: "That username is unavailable." }, 409);
+			).bind(id, username, salt, storedPasswordHash, storedRecoveryCodeHash, now, now, now).run();
+		} catch (error) {
+			const message = String(error?.message || error);
+			if (/UNIQUE constraint failed: accounts\.username/i.test(message)) {
+				return json({ error: "That username is unavailable." }, 409);
+			}
+			console.error("Vigil signup database insert failed", error);
+			return json({ error: "We couldn’t create your account right now. Please try again." }, 500);
 		}
 		const token = await newSession(env, id);
 		return json({ account: { id, username, plan: "free" }, recoveryCode }, 201, { "set-cookie": sessionCookie(token) });

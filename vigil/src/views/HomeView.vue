@@ -114,7 +114,6 @@ const installOptions = [
             <article class="download-card"><div class="download-card-top"><span class="download-label">FREE</span></div><h3>$0</h3><p>Up to five sites, focus sessions, pause and override, and basic on-device counts.</p><a class="button button-light" href="#install">Download Vigil</a></article>
             <article class="download-card plus-card"><div class="download-card-top"><span class="download-label">VIGIL PLUS</span></div><h3>$4.99 <small>/ month</small></h3><p>Unlimited sites, recurring schedules, opt-in sync, longer history, and backup.</p><a class="button button-light" href="/account">Start Plus</a></article>
           </div>
-          <p class="pricing-note">Plus checkout will be available after account and billing setup is complete.</p>
         </div>
       </section>
 

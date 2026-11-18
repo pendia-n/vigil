@@ -40,6 +40,6 @@ Blocking rules run in the browser. Vigil does not send browsing history, page te
 
 ## Worker
 
-The Worker serves the landing page and account/billing APIs. Apply `migrations/0001_paid_accounts.sql` to a Cloudflare D1 database and bind it as `DB` before enabling accounts. Configure `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, and `STRIPE_WEBHOOK_SECRET` as Worker secrets/variables in Cloudflare; set `EXTENSION_ORIGINS` only to trusted published extension origins. Never commit or bundle these values. The session is an opaque token in an HttpOnly, Secure cookie; no static JWT is required.
+The Worker serves the landing page and account and billing APIs. Apply `migrations/0001_paid_accounts.sql` to a Cloudflare D1 database and bind it as `DB`. Configure `JWT_SECRET`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` as Worker secrets. Checkout sends the $4.99 USD monthly price directly to Stripe. Set `EXTENSION_ORIGINS` only to trusted published extension origins. The session is a signed JWT in an HttpOnly, Secure cookie.
 
 Run `pnpm run deploy` from an authenticated Cloudflare environment to build and deploy the Worker named `vigil`. Configure the Stripe endpoint to send subscription, invoice, checkout, and refund events to `/api/stripe/webhook`.
