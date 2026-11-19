@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vigil — Focus with intention",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Pause selected websites during focus time. Your rules and session data stay on this device.",
   "permissions": ["storage", "alarms", "declarativeNetRequest"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],

@@ -11,9 +11,11 @@ function playSound() {
 }
 
 async function setupSound() {
-	const { focusSound } = await api.storage.local.get("focusSound");
+	const { focusSound, focusTrack } = await api.storage.local.get(["focusSound", "focusTrack"]);
 	if (!focusSound || sessionEndsAt <= Date.now()) return;
-	focusAudio = new Audio(api.runtime.getURL("focus-cue.mp3"));
+	const tracks = ["VIGIL_MODE_Cybernetic_Serenade.mp3", "I_live_in_an_island_song.mp3", "cds_song.mp3"];
+	const track = tracks.includes(focusTrack) ? focusTrack : tracks[0];
+	focusAudio = new Audio(api.runtime.getURL("audio/" + track));
 	focusAudio.volume = 0.4;
 	focusAudio.addEventListener("play", () => { soundButton.textContent = "Stop focus sound"; });
 	for (const event of ["pause", "ended"]) {

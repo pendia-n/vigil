@@ -121,16 +121,26 @@ $("#clear-data").addEventListener("click", async () => {
 });
 
 const sound = $("#sound");
-api.storage.local.get("focusSound").then(settings => {
+const soundTrack = $("#sound-track");
+function setSoundTrack(value) {
+	soundTrack.value = value;
+	if (soundTrack.selectedIndex < 0) soundTrack.selectedIndex = 0;
+}
+api.storage.local.get(["focusSound", "focusTrack"]).then(settings => {
 	sound.checked = Boolean(settings.focusSound);
+	setSoundTrack(settings.focusTrack);
 }).catch(error => showMessage(error.message));
 
+soundTrack.addEventListener("change", () => {
+	api.storage.local.set({ focusTrack: soundTrack.value }).catch(error => showMessage(error.message));
+});
 sound.addEventListener("change", () => {
 	api.storage.local.set({ focusSound: sound.checked }).catch(error => showMessage(error.message));
 });
 api.storage.onChanged.addListener((changes, area) => {
 	if (area !== "local") return;
 	if (changes.focusSound) sound.checked = Boolean(changes.focusSound.newValue);
+	if (changes.focusTrack) setSoundTrack(changes.focusTrack.newValue);
 });
 
 refresh();
