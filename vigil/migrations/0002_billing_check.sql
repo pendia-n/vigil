@@ -1,0 +1,1 @@
+ALTER TABLE accounts ADD COLUMN billing_checked_at INTEGER NOT NULL DEFAULT 0;

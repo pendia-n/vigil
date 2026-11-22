@@ -18,6 +18,17 @@ function formatTime(seconds) {
 }
 
 function render() {
+	const online = Boolean(currentState.online);
+	$("#connection").textContent = online
+		? currentState.username + " · " + (currentState.plan === "plus" ? "Plus" : "Free") + " · Connected"
+		: currentState.connectionError || "Sign in and connect to use Vigil.";
+	$("#login-form").hidden = online;
+	$("#logout").hidden = !currentState.username;
+	$("#domain").disabled = !online;
+	$("#site-form button").disabled = !online;
+	$("#plan-note").textContent = currentState.plan === "plus"
+		? "Plus blocks all saved sites, within browser limits. Music is selected randomly."
+		: "Free blocks five sites. After downgrade, the five most-triggered sites in the last 30 days stay active. Others stay saved.";
 	const active = currentState.session && currentState.session.endsAt > Date.now();
 	const left = active ? Math.ceil((currentState.session.endsAt - Date.now()) / 1000) : 25 * 60;
 	$("#timer").textContent = formatTime(left);
@@ -29,8 +40,8 @@ function render() {
 		: "Choose a few sites, then start a session.";
 	$("#session-actions").classList.toggle("hidden", Boolean(active));
 	$("#stop").classList.toggle("hidden", !active);
-	$("#start").disabled = currentState.domains.length === 0;
-	$("#site-count").textContent = String(currentState.domains.length);
+	$("#start").disabled = !online || currentState.domains.length === 0;
+	$("#site-count").textContent = String(currentState.activeDomains?.length || 0) + " active / " + currentState.domains.length + " saved";
 	$("#pause-count").textContent = String(currentState.stats.pauses || 0);
 	$("#override-count").textContent = String(currentState.stats.overrides || 0);
 	const list = $("#sites");
@@ -38,8 +49,10 @@ function render() {
 	for (const domain of currentState.domains) {
 		const item = document.createElement("li");
 		item.className = "site-item";
+		const activeSite = currentState.activeDomains?.includes(domain);
+		item.classList.toggle("inactive", !activeSite);
 		const label = document.createElement("span");
-		label.textContent = domain;
+		label.textContent = domain + (activeSite ? "" : " · inactive");
 		const remove = document.createElement("button");
 		remove.type = "button";
 		remove.textContent = "×";
@@ -121,27 +134,38 @@ $("#clear-data").addEventListener("click", async () => {
 });
 
 const sound = $("#sound");
-const soundTrack = $("#sound-track");
-function setSoundTrack(value) {
-	soundTrack.value = value;
-	if (soundTrack.selectedIndex < 0) soundTrack.selectedIndex = 0;
-}
-api.storage.local.get(["focusSound", "focusTrack"]).then(settings => {
+api.storage.local.get("focusSound").then(settings => {
 	sound.checked = Boolean(settings.focusSound);
-	setSoundTrack(settings.focusTrack);
 }).catch(error => showMessage(error.message));
 
-soundTrack.addEventListener("change", () => {
-	api.storage.local.set({ focusTrack: soundTrack.value }).catch(error => showMessage(error.message));
-});
 sound.addEventListener("change", () => {
 	api.storage.local.set({ focusSound: sound.checked }).catch(error => showMessage(error.message));
 });
 api.storage.onChanged.addListener((changes, area) => {
 	if (area !== "local") return;
 	if (changes.focusSound) sound.checked = Boolean(changes.focusSound.newValue);
-	if (changes.focusTrack) setSoundTrack(changes.focusTrack.newValue);
 });
 
+$("#login-form").addEventListener("submit", async event => {
+	event.preventDefault();
+	$("#login").disabled = true;
+	try {
+		currentState = await send("login", { username: $("#username").value.trim(), password: $("#password").value });
+		$("#password").value = "";
+		render();
+		showMessage(currentState.connectionError || "Connected.");
+	} catch (error) { showMessage(error.message); }
+	finally { $("#password").value = ""; $("#login").disabled = false; }
+});
+$("#logout").addEventListener("click", async () => {
+	try { currentState = await send("logout"); render(); }
+	catch (error) { showMessage(error.message); }
+});
+window.addEventListener("offline", () => {
+	send("offline").finally(refresh);
+});
+window.addEventListener("online", refresh);
+
 refresh();
+setInterval(refresh, 30000);
 setInterval(() => { if (currentState.session) render(); }, 1000);

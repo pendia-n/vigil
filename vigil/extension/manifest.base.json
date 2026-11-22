@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Vigil — Focus with intention",
-  "version": "0.2.2",
-  "description": "Pause selected websites during focus time. Your rules and session data stay on this device.",
+  "version": "0.3.0",
+  "description": "Pause websites during focus time. Sign in online for five Free sites or Plus access and random music.",
   "permissions": ["storage", "alarms", "declarativeNetRequest"],
+  "host_permissions": ["https://vigil.pendia-community.workers.dev/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_title": "Vigil focus controls",

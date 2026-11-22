@@ -96,14 +96,15 @@ function sessionCookie(token, maxAge = SESSION_SECONDS) {
 
 export async function authenticatedAccount(request, env) {
 	if (!env.DB || !env.JWT_SECRET) return null;
-	const token = cookieValue(request, SESSION_COOKIE);
+	const bearer = request.headers.get("authorization")?.match(/^Bearer ([A-Za-z0-9_.-]+)$/)?.[1];
+	const token = bearer || cookieValue(request, SESSION_COOKIE);
 	if (!token) return null;
 	const claims = await verifyJwt(token, env.JWT_SECRET);
 	if (!claims) return null;
 	const tokenHash = await digest(token);
 	const now = Date.now();
 	const result = await env.DB.prepare(
-		`SELECT a.id, a.username, a.subscription_status, a.subscription_period_end, a.stripe_customer_id, a.stripe_subscription_id
+		`SELECT a.id, a.username, a.subscription_status, a.subscription_period_end, a.stripe_customer_id, a.stripe_subscription_id, a.billing_checked_at
 		 FROM sessions s JOIN accounts a ON a.id = s.account_id
 		 WHERE s.token_hash = ? AND s.account_id = ? AND s.expires_at > ?`
 	).bind(tokenHash, claims.sub, now).first();

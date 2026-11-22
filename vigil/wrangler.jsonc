@@ -7,6 +7,7 @@
 	"name": "vigil",
 	"compatibility_date": "2026-11-10",
 	"main": "server/index.js",
+	"r2_buckets": [{ "binding": "MUSIC", "bucket_name": "vigil-music" }],
 	"assets": {
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",

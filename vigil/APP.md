@@ -2,7 +2,7 @@
 
 ## What it is
 
-Vigil is a Chrome and Brave browser extension that pauses websites a person has chosen during a focus session. A companion site provides product information, account access, and subscription billing. Firefox is deferred.
+Vigil is a Chrome and Brave browser extension that pauses websites a person has chosen during a focus session. A companion site provides product information, account access, and subscription billing. Firefox, Chrome, and Brave packages are provided.
 
 ## Why it exists
 
@@ -18,7 +18,7 @@ The user chooses the sites and session length. The pause page says what happened
 
 ## What makes it distinct
 
-Vigil keeps the decision with the person using it. It uses browser-native request rules rather than reading pages or building a browsing profile. The free focus loop works locally. Optional accounts use username/password sign-in and a one-time recovery code; email recovery, AI, and calendar connections are not required.
+Vigil keeps the decision with the person using it. It uses browser-native request rules rather than reading pages or building a browsing profile. Blocking runs locally while the Worker connection is verified. Required accounts use username/password sign-in and a one-time recovery code; email recovery, AI, and calendar connections are not required.
 
 ## Current limits
 
@@ -26,5 +26,5 @@ The extension only acts in a supported desktop browser and only on sites the use
 
 ## Plans
 - Free: up to five blocked sites, focus sessions, pause/override, and basic on-device counts.
-- Vigil Plus: $4.99 USD/month for unlimited sites, schedules, opt-in sync, longer history, and backup/restore.
+- Vigil Plus: $4.99 USD/month for sites within browser rule limits and random playback from all three tracks in private R2 storage.
 - A 30% refund is available only within 24 hours of a successful charge. Issuing it cancels the subscription and immediately removes Plus access. Mandatory consumer rights still apply.

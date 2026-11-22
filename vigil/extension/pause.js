@@ -4,26 +4,43 @@ let sessionEndsAt = null;
 let waitUntilSessionEnds = false;
 let endNavigationPending = false;
 let focusAudio;
+let audioUrl;
+let loadedPlan;
 const soundButton = document.querySelector("#focus-sound");
+
+function stopSound() {
+	focusAudio?.pause();
+	if (audioUrl) URL.revokeObjectURL(audioUrl);
+	audioUrl = null;
+	focusAudio = null;
+	soundButton.hidden = true;
+}
 
 function playSound() {
 	focusAudio.play().catch(() => { soundButton.textContent = "Play focus sound"; });
 }
 
 async function setupSound() {
-	const { focusSound, focusTrack } = await api.storage.local.get(["focusSound", "focusTrack"]);
+	const { focusSound } = await api.storage.local.get("focusSound");
 	if (!focusSound || sessionEndsAt <= Date.now()) return;
-	const tracks = ["VIGIL_MODE_Cybernetic_Serenade.mp3", "I_live_in_an_island_song.mp3", "cds_song.mp3"];
-	const track = tracks.includes(focusTrack) ? focusTrack : tracks[0];
-	focusAudio = new Audio(api.runtime.getURL("audio/" + track));
+	stopSound();
+	const result = await api.runtime.sendMessage({ type: "get-music" });
+	if (result.error) throw new Error(result.error);
+	const latest = await api.storage.local.get(["focusSound", "accountStatus", "session"]);
+	if (!latest.focusSound || !latest.accountStatus?.online || !latest.session || sessionEndsAt <= Date.now()) return;
+	const bytes = Uint8Array.from(atob(result.audio), char => char.charCodeAt(0));
+	audioUrl = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+	focusAudio = new Audio(audioUrl);
+	loadedPlan = result.plan;
+	focusAudio.loop = result.plan === "plus";
 	focusAudio.volume = 0.4;
 	focusAudio.addEventListener("play", () => { soundButton.textContent = "Stop focus sound"; });
 	for (const event of ["pause", "ended"]) {
 		focusAudio.addEventListener(event, () => { soundButton.textContent = "Play focus sound"; });
 	}
 	soundButton.hidden = false;
-	const allowed = (await api.runtime.sendMessage({ type: "claim-focus-cue" }))?.play;
-	if (allowed && sessionEndsAt > Date.now()) playSound();
+	document.querySelector("#music-title").textContent = result.title;
+	if (sessionEndsAt > Date.now()) playSound();
 }
 
 soundButton.addEventListener("click", () => {
@@ -31,11 +48,25 @@ soundButton.addEventListener("click", () => {
 	if (focusAudio.paused) playSound();
 	else focusAudio.pause();
 });
-window.addEventListener("pagehide", () => focusAudio?.pause());
+window.addEventListener("pagehide", stopSound);
+window.addEventListener("offline", () => {
+	stopSound();
+	api.runtime.sendMessage({ type: "offline" }).catch(() => {});
+});
 api.storage.onChanged.addListener((changes, area) => {
 	if (area === "local" && (changes.session && !changes.session.newValue || changes.focusSound && !changes.focusSound.newValue)) {
 		focusAudio?.pause();
 		soundButton.hidden = true;
+	}
+	if (area === "local" && changes.accountStatus) {
+		const status = changes.accountStatus.newValue;
+		if (!status?.online) {
+			stopSound();
+			sessionEndsAt = null;
+			document.querySelector("#error").textContent = status?.error || "Vigil disconnected.";
+		} else if (focusAudio && loadedPlan !== status.plan) {
+			setupSound().catch(error => { document.querySelector("#error").textContent = error.message; });
+		}
 	}
 });
 
@@ -81,16 +112,25 @@ function openTargetAfterSession() {
 }
 
 setTargetLabel();
-api.runtime.sendMessage({ type: "pause-shown" }).catch(() => {});
+api.runtime.sendMessage({ type: "pause-shown", target }).catch(() => {});
 api.runtime.sendMessage({ type: "get-state" }).then(state => {
 	if (state && state.session) {
 		sessionEndsAt = state.session.endsAt;
 		if (state.session.taskLabel) document.querySelector("#focus-note").textContent = "You planned to work on: " + state.session.taskLabel;
-		setupSound().catch(() => {});
+		setupSound().catch(error => { document.querySelector("#error").textContent = error.message; });
 	}
 	renderTimer();
 }).catch(() => renderTimer());
 setInterval(renderTimer, 1000);
+setInterval(() => {
+	api.runtime.sendMessage({ type: "get-state" }).then(state => {
+		if (!state.online || !state.session) {
+			stopSound();
+			sessionEndsAt = null;
+			document.querySelector("#error").textContent = state.connectionError || "Your focus session ended.";
+		} else sessionEndsAt = state.session.endsAt;
+	}).catch(stopSound);
+}, 30000);
 
 document.querySelector("#return").addEventListener("click", () => {
 	if (history.length > 1) history.back();
@@ -105,6 +145,10 @@ document.querySelector("#wait").addEventListener("click", () => {
 });
 
 document.querySelector("#continue").addEventListener("click", async event => {
+	if ((!sessionEndsAt || sessionEndsAt <= Date.now()) && /^https?:\/\//.test(target)) {
+		location.replace(target);
+		return;
+	}
 	const button = event.currentTarget;
 	button.disabled = true;
 	document.querySelector("#error").textContent = "";

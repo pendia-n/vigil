@@ -13,6 +13,20 @@
         <div><p class="eyebrow">YOUR FOCUS, YOUR RULES</p><h1>Vigil</h1></div>
         <span id="live-dot" class="live-dot" aria-label="Session inactive"></span>
       </header>
+      <section class="account-section">
+        <p id="connection" role="status">Checking your account…</p>
+        <form id="login-form">
+          <label class="field-label" for="username">Username</label>
+          <input id="username" autocomplete="username" maxlength="32" required />
+          <label class="field-label" for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" minlength="12" maxlength="256" required />
+          <button class="primary-button" id="login" type="submit">Sign in</button>
+        </form>
+        <a href="https://vigil.pendia-community.workers.dev/account" target="_blank" rel="noopener">Create account or manage Plus</a>
+        <a href="https://vigil.pendia-community.workers.dev/privacy.html" target="_blank" rel="noopener">Privacy</a>
+        <button id="logout" class="quiet-button" type="button" hidden>Sign out</button>
+        <p id="plan-note" class="permission-note">Internet access and an account are required.</p>
+      </section>
 
       <section class="session-card" aria-live="polite">
         <p id="session-state" class="eyebrow">READY WHEN YOU ARE</p>
@@ -28,12 +42,7 @@
             <option value="90">90 minutes</option>
           </select>
           <label class="field-label sound-choice"><input id="sound" type="checkbox" /> Play a sound on the pause page</label>
-          <label class="field-label" for="sound-track">Pause music</label>
-          <select id="sound-track">
-            <option value="VIGIL_MODE_Cybernetic_Serenade.mp3">Vigil Mode — Cybernetic Serenade</option>
-            <option value="I_live_in_an_island_song.mp3">I Live in an Island</option>
-            <option value="cds_song.mp3">CDS Song</option>
-          </select>
+          <p id="music-note" class="permission-note">Free plays Vigil Mode. Plus randomly plays one of three tracks.</p>
           <button id="start" class="primary-button" type="button">Start focus</button>
         </div>
         <button id="stop" class="quiet-button hidden" type="button">End session</button>

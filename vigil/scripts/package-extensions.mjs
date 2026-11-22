@@ -29,8 +29,8 @@ const variants = [
       browser_specific_settings: {
         gecko: {
           id: 'vigil-focus@vigil.app',
-          strict_min_version: '128.0',
-          data_collection_permissions: { required: ['none'] },
+          strict_min_version: '142.0',
+          data_collection_permissions: { required: ['authenticationInfo'] },
         },
       },
     },
@@ -41,7 +41,6 @@ const variants = [
 for (const variant of variants) {
   const stage = mkdtempSync(join(tmpdir(), 'vigil-extension-'))
   for (const file of appFiles) cpSync(join(source, file), join(stage, file))
-  cpSync(join(source, 'audio'), join(stage, 'audio'), { recursive: true })
   cpSync(join(source, 'icons'), join(stage, 'icons'), { recursive: true })
   const manifest = {
     ...baseManifest,

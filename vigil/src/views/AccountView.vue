@@ -157,7 +157,8 @@ onMounted(loadAccount)
 
       <div v-else class="account-panel">
         <div class="plan-row"><span>Current plan</span><strong>{{ account.plan === 'plus' ? 'Vigil Plus · $4.99/month' : 'Free' }}</strong></div>
-        <p v-if="account.plan !== 'plus'" class="intro">Free includes five sites and focus sessions. Plus adds unlimited sites, schedules, sync, history, and backup.</p>
+        <p class="intro">Sign in with this username and password inside the updated Vigil extension. Internet access is required. Free includes five active sites and Vigil Mode music. Plus adds sites within browser limits and random playback from all three tracks.</p>
+        <p class="hint">If renewal fails, Plus ends. Vigil keeps your five most-triggered sites from the last 30 days active and saves the rest as inactive.</p>
         <button v-if="account.plan !== 'plus'" class="action-button" type="button" :disabled="busy" @click="beginCheckout">Subscribe to Plus — $4.99/month</button>
         <button v-else class="action-button" type="button" :disabled="busy" @click="openPortal">Manage subscription</button>
         <button v-if="account.plan === 'plus' || account.refundPending" class="text-button" type="button" :disabled="busy" @click="requestRefund">{{ account.refundPending ? 'Retry 30% refund and cancellation' : 'Request 30% refund and cancel' }}</button>

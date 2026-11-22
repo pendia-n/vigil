@@ -127,27 +127,55 @@ function subscriptionId(invoice) {
 	return typeof nested === "string" ? nested : nested?.id || null;
 }
 
+export async function reconcileSubscription(env, account, stripe = stripeClient(env)) {
+	if (!account.stripe_subscription_id && account.stripe_customer_id) {
+		const subscriptions = await stripe.subscriptions.list({ customer: account.stripe_customer_id, status: "all", limit: 10 });
+		const latest = subscriptions.data.filter(sub => sub.metadata?.vigil_account_id === account.id).sort((a, b) => b.created - a.created)[0];
+		if (latest) {
+			await env.DB.prepare("UPDATE accounts SET stripe_subscription_id = ? WHERE id = ? AND stripe_subscription_id IS NULL")
+				.bind(latest.id, account.id).run();
+			account = { ...account, stripe_subscription_id: latest.id };
+		}
+	}
+	if (!account.stripe_subscription_id) {
+		await env.DB.prepare("UPDATE accounts SET billing_checked_at = ? WHERE id = ?").bind(Date.now(), account.id).run();
+		return;
+	}
+	const sub = await stripe.subscriptions.retrieve(account.stripe_subscription_id, { expand: ["latest_invoice"] });
+	const invoice = sub.latest_invoice;
+	let status = sub.status;
+	if (status === "active" && invoice && typeof invoice !== "string" && invoice.status !== "paid") status = "past_due";
+	const end = Number(sub.items?.data?.[0]?.current_period_end ?? sub.current_period_end ?? 0) * 1000;
+	await env.DB.prepare(
+		`UPDATE accounts SET subscription_status = CASE WHEN subscription_status IN ('risk_hold', 'refunded') THEN subscription_status ELSE ? END,
+		 subscription_period_end = ?, billing_checked_at = ?, updated_at = ? WHERE id = ? AND stripe_subscription_id = ?`
+	).bind(status, end, Date.now(), Date.now(), account.id, sub.id).run();
+}
+
 async function applyEvent(event, env, stripe) {
 	const object = event.data.object;
 	if (event.type.startsWith("customer.subscription.")) {
 		const customerId = typeof object.customer === "string" ? object.customer : object.customer?.id;
-		const account = await env.DB.prepare("SELECT id FROM accounts WHERE stripe_customer_id = ?").bind(customerId).first();
+		const account = await env.DB.prepare("SELECT id, stripe_subscription_id FROM accounts WHERE stripe_customer_id = ?").bind(customerId).first();
 		if (!account) return;
-		const status = object.status === "active" || object.status === "trialing" ? "active" : object.status;
-		const periodEnd = Number(object.items?.data?.[0]?.current_period_end ?? object.current_period_end ?? 0) * 1000;
-		await env.DB.prepare("UPDATE accounts SET stripe_subscription_id = ?, subscription_status = ?, subscription_period_end = ?, updated_at = ? WHERE id = ?")
-			.bind(object.id, status, periodEnd, Date.now(), account.id).run();
+		if (account.stripe_subscription_id && account.stripe_subscription_id !== object.id) return;
+		await env.DB.prepare("UPDATE accounts SET stripe_subscription_id = ? WHERE id = ?").bind(object.id, account.id).run();
+		await reconcileSubscription(env, { ...account, stripe_subscription_id: object.id }, stripe);
 		return;
 	}
 
 	if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
 		const customerId = typeof object.customer === "string" ? object.customer : object.customer?.id;
-		const account = await env.DB.prepare("SELECT id FROM accounts WHERE stripe_customer_id = ?").bind(customerId).first();
+		const account = await env.DB.prepare("SELECT id, stripe_subscription_id FROM accounts WHERE stripe_customer_id = ?").bind(customerId).first();
 		if (!account) return;
 		const id = subscriptionId(object);
-		const status = event.type === "invoice.paid" ? "active" : "past_due";
-		await env.DB.prepare("UPDATE accounts SET stripe_subscription_id = COALESCE(?, stripe_subscription_id), subscription_status = ?, last_paid_at = CASE WHEN ? = 'active' THEN ? ELSE last_paid_at END, updated_at = ? WHERE id = ?")
-			.bind(id, status, status, Date.now(), Date.now(), account.id).run();
+		if (!id || account.stripe_subscription_id && account.stripe_subscription_id !== id) return;
+		await env.DB.prepare("UPDATE accounts SET stripe_subscription_id = ? WHERE id = ?").bind(id, account.id).run();
+		if (event.type === "invoice.payment_failed") {
+			await env.DB.prepare("UPDATE accounts SET subscription_status = 'past_due', billing_checked_at = ? WHERE id = ? AND subscription_status NOT IN ('risk_hold', 'refunded')")
+				.bind(Date.now(), account.id).run();
+		}
+		await reconcileSubscription(env, { ...account, stripe_subscription_id: id }, stripe);
 		return;
 	}
 
@@ -157,6 +185,20 @@ async function applyEvent(event, env, stripe) {
 		if (accountId && customerId) {
 			await env.DB.prepare("UPDATE accounts SET stripe_customer_id = COALESCE(stripe_customer_id, ?), updated_at = ? WHERE id = ?")
 				.bind(customerId, Date.now(), accountId).run();
+			const id = typeof object.subscription === "string" ? object.subscription : object.subscription?.id;
+			if (id) {
+				const current = await env.DB.prepare("SELECT stripe_subscription_id FROM accounts WHERE id = ? AND stripe_customer_id = ?")
+					.bind(accountId, customerId).first();
+				if (!current) return;
+				if (current.stripe_subscription_id && current.stripe_subscription_id !== id) {
+					const previous = await stripe.subscriptions.retrieve(current.stripe_subscription_id);
+					const next = await stripe.subscriptions.retrieve(id);
+					if (previous.created >= next.created) return;
+				}
+				await env.DB.prepare("UPDATE accounts SET subscription_status = CASE WHEN stripe_subscription_id IS NOT ? THEN 'incomplete' ELSE subscription_status END, stripe_subscription_id = ? WHERE id = ? AND stripe_customer_id = ?")
+					.bind(id, id, accountId, customerId).run();
+				await reconcileSubscription(env, { id: accountId, stripe_subscription_id: id }, stripe);
+			}
 		}
 		return;
 	}
@@ -168,7 +210,7 @@ async function applyEvent(event, env, stripe) {
 		if (account.stripe_subscription_id) {
 			try { await stripe.subscriptions.cancel(account.stripe_subscription_id); } catch { /* Already canceled or no longer cancellable. */ }
 		}
-		await env.DB.prepare("UPDATE accounts SET subscription_status = 'canceled', subscription_period_end = ?, updated_at = ? WHERE id = ?")
+		await env.DB.prepare("UPDATE accounts SET subscription_status = 'refunded', subscription_period_end = ?, updated_at = ? WHERE id = ?")
 			.bind(Date.now(), Date.now(), account.id).run();
 	}
 

@@ -1,6 +1,14 @@
 <script setup>
 const installOptions = [
   {
+    name: 'Firefox',
+    label: 'Firefox build',
+    description: 'Download the Firefox package for testing or store submission. Public installation requires Mozilla signing.',
+    href: '/downloads/vigil-firefox.zip',
+    action: 'Download for Firefox',
+    instructions: 'about:debugging · This Firefox · Load Temporary Add-on · manifest.json',
+  },
+  {
     name: 'Chrome + Brave',
     label: 'Chromium build',
     description: 'Brave supports manual installation from this ZIP. Chrome users can load the unpacked build for testing; a store listing is needed for a simple public install.',
@@ -95,11 +103,11 @@ const installOptions = [
         <div class="privacy-copy">
           <p class="eyebrow">PRIVATE BY DEFAULT</p>
           <h2>Your focus belongs<br /><em>to you.</em></h2>
-          <p>Free settings stay in your browser. If you opt in to Plus sync, Vigil stores only the settings and summaries needed for that feature—not full browsing history or page contents.</p>
+          <p>Vigil checks your account and subscription online and loads music from private storage. Your selected sites, focus goal, and recent trigger counts stay in your browser.</p>
         </div>
         <ul class="privacy-points">
           <li><span>01</span><span>Only the sites you choose</span></li>
-          <li><span>02</span><span>Free focus works without an account</span></li>
+          <li><span>02</span><span>Account and internet required for both plans</span></li>
           <li><span>03</span><span>Clear or remove your rules anytime</span></li>
         </ul>
       </section>
@@ -108,11 +116,11 @@ const installOptions = [
         <div class="page-wrap install-wrap">
           <div class="install-heading">
             <div><p class="eyebrow">SIMPLE PLANS</p><h2>Start free.<br /><em>Go further with Plus.</em></h2></div>
-            <p>The core focus loop stays free. Plus supports longer-term routines and keeps your setup available across devices.</p>
+            <p>Both plans include focus timers, reminders, and a five-minute override. Internet access is required. Music plays on the pause page when enabled.</p>
           </div>
           <div class="download-grid pricing-grid">
-            <article class="download-card"><div class="download-card-top"><span class="download-label">FREE</span></div><h3>$0</h3><p>Up to five sites, focus sessions, pause and override, and basic on-device counts.</p><a class="button button-light" href="#install">Download Vigil</a></article>
-            <article class="download-card plus-card"><div class="download-card-top"><span class="download-label">VIGIL PLUS</span></div><h3>$4.99 <small>/ month</small></h3><p>Unlimited sites, recurring schedules, opt-in sync, longer history, and backup.</p><a class="button button-light" href="/account">Start Plus</a></article>
+            <article class="download-card"><div class="download-card-top"><span class="download-label">FREE</span></div><h3>$0</h3><p>Five active sites and the Vigil Mode music track. Create an account and sign in inside the extension.</p><a class="button button-light" href="#install">Download Vigil</a></article>
+            <article class="download-card plus-card"><div class="download-card-top"><span class="download-label">VIGIL PLUS</span></div><h3>$4.99 <small>/ month</small></h3><p>All your saved sites, within browser limits. Each pause randomly plays one of three tracks. Failed renewal removes Plus access; your five most-triggered sites from the last 30 days remain active.</p><a class="button button-light" href="/account">Start Plus</a></article>
           </div>
         </div>
       </section>
@@ -143,6 +151,7 @@ const installOptions = [
       <a class="brand" href="#top"><img src="/vigil.svg" alt="" width="28" height="28" /><span>VIGIL</span></a>
       <p>A calmer pause, made for the work that matters to you.</p>
       <a href="#top">Back to top ↑</a>
+      <a href="/privacy.html">Privacy policy</a>
     </footer>
   </div>
 </template>
