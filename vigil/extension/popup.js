@@ -1,5 +1,7 @@
 const api = globalThis.browser || globalThis.chrome;
 const $ = selector => document.querySelector(selector);
+let selectedSites = new Set();
+let knownSites = new Set();
 let currentState = { domains: [], session: null, stats: { pauses: 0, overrides: 0 } };
 
 function showMessage(text) {
@@ -12,9 +14,16 @@ async function send(type, data = {}) {
 	return result;
 }
 
+function selectedMinutes() {
+	return $("#duration").value === "custom" ? Number($("#duration-value").value) * Number($("#duration-unit").value) : Number($("#duration").value);
+}
 function formatTime(seconds) {
-	const safe = Math.max(0, seconds);
-	return String(Math.floor(safe / 60)).padStart(2, "0") + ":" + String(safe % 60).padStart(2, "0");
+	const safe = Math.max(0, Math.ceil(seconds) || 0);
+	const days = Math.floor(safe / 86400);
+	const hours = Math.floor(safe / 3600) % 24;
+	const minutes = Math.floor(safe / 60) % 60;
+	const tail = String(minutes).padStart(2, "0") + ":" + String(safe % 60).padStart(2, "0");
+	return days ? days + "d " + String(hours).padStart(2, "0") + ":" + tail : safe >= 3600 ? Math.floor(safe / 3600) + ":" + tail : tail;
 }
 
 function render() {
@@ -30,7 +39,7 @@ function render() {
 		? "Plus blocks all saved sites, within browser limits. Music is selected randomly."
 		: "Free blocks five sites. After downgrade, the five most-triggered sites in the last 30 days stay active. Others stay saved.";
 	const active = currentState.session && currentState.session.endsAt > Date.now();
-	const left = active ? Math.ceil((currentState.session.endsAt - Date.now()) / 1000) : 25 * 60;
+	const left = active && currentState.sessions?.length >= (currentState.plan === "plus" ? 5 : 1) ? Math.ceil((currentState.session.endsAt - Date.now()) / 1000) : selectedMinutes() * 60;
 	$("#timer").textContent = formatTime(left);
 	$("#live-dot").classList.toggle("active", Boolean(active));
 	$("#live-dot").setAttribute("aria-label", active ? "Session active" : "Session inactive");
@@ -38,12 +47,30 @@ function render() {
 	$("#task-copy").textContent = active
 		? (currentState.session.taskLabel || "Your chosen sites are paused for this session.")
 		: "Choose a few sites, then start a session.";
-	$("#session-actions").classList.toggle("hidden", Boolean(active));
-	$("#stop").classList.toggle("hidden", !active);
-	$("#start").disabled = !online || currentState.domains.length === 0;
+	const sessions = currentState.sessions || [];
+	const atLimit = sessions.length >= (currentState.plan === "plus" ? 5 : 1);
+	$("#session-actions").classList.toggle("hidden", atLimit);
+	$("#locked-note").hidden = !active;
+	$("#locked-note").textContent = "Active commitments cannot be ended early. " + (currentState.plan === "plus" ? sessions.length + " / 5 sessions active." : "Free allows one active session.");
+	$("#logout").disabled = Boolean(active);
+	$("#clear-data").disabled = Boolean(active);
+	$("#active-sessions").replaceChildren();
+	for (const session of sessions) {
+		const row = document.createElement("p"); row.className = "permission-note";
+		row.textContent = (session.taskLabel || "Focus") + " · " + formatTime((session.endsAt - Date.now()) / 1000) + " · " + session.domains.join(", ");
+		$("#active-sessions").append(row);
+	}
+	$("#session-site-options").replaceChildren();
+	for (const domain of currentState.activeDomains || []) {
+		if (!knownSites.has(domain)) { selectedSites.add(domain); knownSites.add(domain); }
+		const label = document.createElement("label");
+		const checkbox = document.createElement("input"); checkbox.type = "checkbox"; checkbox.checked = selectedSites.has(domain);
+		checkbox.addEventListener("change", () => { if (checkbox.checked) selectedSites.add(domain); else selectedSites.delete(domain); render(); });
+		label.append(checkbox, document.createTextNode(domain)); $("#session-site-options").append(label);
+	}
+	$("#start").disabled = !online || atLimit || !(currentState.activeDomains || []).some(domain => selectedSites.has(domain));
 	$("#site-count").textContent = String(currentState.activeDomains?.length || 0) + " active / " + currentState.domains.length + " saved";
 	$("#pause-count").textContent = String(currentState.stats.pauses || 0);
-	$("#override-count").textContent = String(currentState.stats.overrides || 0);
 	const list = $("#sites");
 	list.replaceChildren();
 	for (const domain of currentState.domains) {
@@ -56,6 +83,7 @@ function render() {
 		const remove = document.createElement("button");
 		remove.type = "button";
 		remove.textContent = "×";
+		remove.disabled = sessions.some(session => session.domains.includes(domain));
 		remove.setAttribute("aria-label", "Remove " + domain);
 		remove.addEventListener("click", async () => {
 			try {
@@ -72,7 +100,9 @@ function render() {
 
 async function refresh() {
 	try {
+		currentState = await send("complete-sites");
 		currentState = await send("get-state");
+		if (currentState.addError) showMessage(currentState.addError);
 		render();
 	} catch (error) {
 		showMessage(error.message || "Vigil could not load your local settings.");
@@ -88,14 +118,20 @@ $("#site-form").addEventListener("submit", async event => {
 		showMessage("Enter a site domain, like youtube.com.");
 		return;
 	}
-	const pattern = "*://*." + hostname + "/*";
+	const patterns = ["http://*." + hostname + "/*", "https://*." + hostname + "/*"];
 	try {
-		const granted = await api.permissions.request({ origins: [pattern] });
+		// Start both operations in the click handler. The background owns completion if this popup closes.
+		const prepared = send("prepare-site", { domain: hostname });
+		const permission = api.permissions.request({ origins: patterns });
+		await prepared;
+		const granted = await permission;
 		if (!granted) {
-			showMessage("Site access was not granted. You can add it later.");
+			await send("cancel-site", { domain: hostname });
+			showMessage("Site access was not granted.");
 			return;
 		}
-		currentState = await send("add-domain", { domain: hostname });
+		currentState = await send("complete-sites");
+		if (currentState.addError) throw new Error(currentState.addError);
 		field.value = "";
 		showMessage("");
 		render();
@@ -106,19 +142,15 @@ $("#site-form").addEventListener("submit", async event => {
 
 $("#start").addEventListener("click", async () => {
 	try {
+		const minutes = selectedMinutes();
+		if (!Number.isFinite(minutes) || minutes < 1 || minutes > 525600) throw new Error("Choose one minute to 365 days.");
+		if (!window.confirm("Block the selected sites for " + formatTime(minutes * 60) + "? You cannot end this session early.")) return;
 		currentState = await send("start-session", {
-			minutes: Number($("#duration").value),
+			minutes: selectedMinutes(),
+			domains: (currentState.activeDomains || []).filter(domain => selectedSites.has(domain)),
 			taskLabel: $("#task").value
 		});
 		showMessage("");
-		render();
-	} catch (error) { showMessage(error.message); }
-});
-
-$("#stop").addEventListener("click", async () => {
-	try {
-		currentState = await send("end-session");
-		showMessage("Session ended. Your sites are available again.");
 		render();
 	} catch (error) { showMessage(error.message); }
 });
@@ -144,6 +176,9 @@ sound.addEventListener("change", () => {
 api.storage.onChanged.addListener((changes, area) => {
 	if (area !== "local") return;
 	if (changes.focusSound) sound.checked = Boolean(changes.focusSound.newValue);
+	if (changes.domains || changes.sessions || changes.addError) {
+		send("get-state").then(state => { currentState = state; render(); if (state.addError) showMessage(state.addError); }).catch(error => showMessage(error.message));
+	}
 });
 
 $("#login-form").addEventListener("submit", async event => {
@@ -166,6 +201,13 @@ window.addEventListener("offline", () => {
 });
 window.addEventListener("online", refresh);
 
+for (const selector of ["#duration", "#duration-value", "#duration-unit"]) {
+	$(selector).addEventListener("change", () => { $("#custom-duration").hidden = $("#duration").value !== "custom"; render(); });
+	$(selector).addEventListener("input", render);
+}
 refresh();
 setInterval(refresh, 30000);
-setInterval(() => { if (currentState.session) render(); }, 1000);
+setInterval(() => {
+	if (currentState.session && currentState.sessions?.length >= (currentState.plan === "plus" ? 5 : 1)) $("#timer").textContent = formatTime((currentState.session.endsAt - Date.now()) / 1000);
+	if (currentState.sessions?.some(session => session.endsAt <= Date.now())) refresh();
+}, 1000);

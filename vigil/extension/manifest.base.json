@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vigil — Focus with intention",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Pause websites during focus time. Sign in online for five Free sites or Plus access and random music.",
   "permissions": ["storage", "alarms", "declarativeNetRequest"],
   "host_permissions": ["https://vigil.pendia-community.workers.dev/*"],

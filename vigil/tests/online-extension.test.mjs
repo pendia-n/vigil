@@ -33,7 +33,13 @@ function harness() {
 	const api = {
 		runtime: { id: "test-extension", getURL: path => "chrome-extension://test/" + path, onMessage: events(), onInstalled: events(), onStartup: events() },
 		storage: { local, session: storage() },
-		permissions: { contains: async () => true, remove: async () => true, onRemoved: events() },
+		permissions: {
+            contains: async ({ origins }) => {
+                for (const origin of origins) assert.match(origin, /^https?:\/\//, "Site permissions must use the explicitly declared HTTP or HTTPS scheme");
+                return true;
+            },
+            remove: async () => true, onRemoved: events(), onAdded: events()
+        },
 		alarms: { create: async () => {}, clear: async () => {}, getAll: async () => [], onAlarm: events() },
 		declarativeNetRequest: {
 			getDynamicRules: async () => rules,
@@ -43,7 +49,7 @@ function harness() {
 		}
 	};
 	h.context = vm.createContext({
-		chrome: api, URL, AbortSignal, Response, Date, btoa,
+		chrome: api, URL, AbortSignal, Response, Date, btoa, crypto: webcrypto,
 		fetch: async () => {
 			h.calls++;
 			if (!h.online) throw new Error("Network unavailable");
@@ -91,17 +97,20 @@ test("Plus downgrade retains the five recently most-triggered sites without dele
 	assert.equal(h.rules().length, 7);
 });
 
-test("Lost connection ends the session and removes blocking rules", async () => {
+test("Lost connection suspends blocking and preserves the commitment for reconnection", async () => {
 	const h = harness();
 	await h.run('addDomain("netflix.com")');
 	await h.run('startSession(25, "Work")');
 	assert.equal(h.rules().length, 1);
 	h.online = false;
 	await h.run("refreshOnline()");
-	assert.equal(h.local.values.session, null);
+	assert.equal(h.local.values.sessions.length, 1);
 	assert.equal(h.local.values.accountStatus.online, false);
 	assert.equal(h.rules().length, 0);
 	await assert.rejects(h.run('startSession(25, "Work")'), /Network unavailable/);
+	h.online = true;
+	await h.run("refreshOnline()");
+	assert.equal(h.rules().length, 1);
 });
 
 test("Repeated pause messages count once and preserve per-site trigger totals", async () => {
@@ -193,3 +202,42 @@ test("Failed renewal webhook and later subscription events preserve Free access 
 });
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
+
+test("Plus supports five overlapping or distinct sessions and rejects a sixth", async () => {
+ const h = harness(); h.plan = "plus";
+ await h.run('addDomain("youtube.com")'); await h.run('addDomain("instagram.com")');
+ await h.run('startSession(10080, "Week", ["youtube.com"])');
+ await h.run('startSession(50, "Work", ["youtube.com", "instagram.com"])');
+ assert.equal(h.rules().length, 2);
+ assert.equal((await h.run('getState("https://youtube.com")')).session.durationMinutes, 10080);
+ assert.equal((await h.run('getState("https://instagram.com")')).session.durationMinutes, 50);
+ for (let i = 0; i < 3; i++) await h.run('startSession(1, "Short", ["instagram.com"])');
+ await assert.rejects(h.run('startSession(1, "Sixth", ["instagram.com"])'), /five concurrent/);
+ for (const session of h.local.values.sessions) if (session.durationMinutes === 1) session.endsAt = Date.now() - 1;
+ await h.run('expireSessionIfNeeded()'); assert.equal(h.local.values.sessions.length, 2);
+ h.local.values.sessions.find(session => session.durationMinutes === 50).endsAt = Date.now() - 1;
+ await h.run('expireSessionIfNeeded()'); assert.equal(h.rules().length, 1);
+ assert.match(h.rules()[0].condition.regexFilter, /youtube/);
+});
+
+test("Active commitments reject all early exits and survive restart reconciliation", async () => {
+ const h = harness(); await h.run('addDomain("netflix.com")');
+ await h.run('startSession(10080, "Week")');
+ for (const expression of ['removeDomain("netflix.com")', 'clearLocalData()', 'startSession(1, "Replace")', 'handleMessage({type:"end-session"}, {})', 'handleMessage({type:"continue-site"}, {})']) await assert.rejects(h.run(expression));
+ await h.run('reconcile()'); assert.equal(h.rules().length, 1);
+ assert.equal(h.local.values.sessions[0].durationMinutes, 10080);
+ h.local.values.sessions[0].endsAt = Date.now() - 1;
+ await h.run('expireSessionIfNeeded()'); assert.equal(h.rules().length, 0);
+ await h.run('removeDomain("netflix.com")'); assert.equal(h.local.values.domains.length, 0);
+});
+
+test("Permission grant completes a durable pending addition without the popup", async () => {
+ const h = harness();
+ await h.run('handleMessage({type:"prepare-site", domain:"youtube.com"}, {url:chrome.runtime.getURL("popup.html")})');
+ assert.ok(h.local.values.pendingSites["youtube.com"]);
+ await h.run('completePendingSites()');
+ assert.deepEqual(h.local.values.domains, ["youtube.com"]);
+ assert.deepEqual(h.local.values.pendingSites, {});
+ await h.run('completePendingSites()'); assert.equal(h.local.values.domains.length, 1);
+});

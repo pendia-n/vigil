@@ -41,7 +41,7 @@ const installOptions = [
           <p class="eyebrow"><span class="eyebrow-dot"></span> A quieter way to focus</p>
           <h1>Make room for the work <em>you came to do.</em></h1>
           <p class="hero-description">
-            Choose the sites that pull you away. Start a focus session. When you drift, Vigil gives you a moment to choose what happens next.
+            Choose the sites that pull you away. Start a focus session. Vigil blocks those sites while your focus timer runs.
           </p>
           <div class="hero-actions">
             <a class="button button-bright" href="#install">Get the extension <span aria-hidden="true">↗</span></a>
@@ -70,8 +70,8 @@ const installOptions = [
       <section class="statement page-wrap" id="how">
         <div class="section-index"><span>01</span><span class="index-line"></span><span>THE PRACTICE</span></div>
         <div class="statement-content">
-          <h2>Not another willpower test.<br /><span>A little space to choose.</span></h2>
-          <p>Vigil is a small browser companion for the moment your attention starts to wander. It keeps the decision yours: return to your task, wait out the pause, or continue when you need to.</p>
+          <h2>Not another willpower test.<br /><span>Block distractions for the time you choose.</span></h2>
+          <p>Choose the sites and end time before you start. Once the timer starts, Vigil gives you a pause page and a way back to your task.</p>
         </div>
       </section>
 
@@ -87,13 +87,13 @@ const installOptions = [
             <span class="step-number">02 / BEGIN</span>
             <div class="step-symbol symbol-time" aria-hidden="true"><span>25</span></div>
             <h3>Set your own pace.</h3>
-            <p>Start a 25, 50, or 90 minute session. Add a short task label if it helps you remember what you came to do.</p>
+            <p>Choose a preset or set a custom duration in minutes, hours, or days. Add a short task label if it helps you remember what you came to do.</p>
           </article>
           <article class="step-card">
             <span class="step-number">03 / DECIDE</span>
             <div class="step-symbol symbol-choice" aria-hidden="true"><span>↗</span><span>↙</span></div>
             <h3>Choose the next move.</h3>
-            <p>When a selected site opens, pause and return to work—or deliberately continue to that site for five minutes.</p>
+            <p>When you try to open a blocked site, see the time left, play optional music, and return to your task.</p>
           </article>
         </div>
       </section>
@@ -108,7 +108,7 @@ const installOptions = [
         <ul class="privacy-points">
           <li><span>01</span><span>Only the sites you choose</span></li>
           <li><span>02</span><span>Account and internet required for both plans</span></li>
-          <li><span>03</span><span>Clear or remove your rules anytime</span></li>
+          <li><span>03</span><span>Manage your site list between sessions</span></li>
         </ul>
       </section>
 
@@ -116,11 +116,11 @@ const installOptions = [
         <div class="page-wrap install-wrap">
           <div class="install-heading">
             <div><p class="eyebrow">SIMPLE PLANS</p><h2>Start free.<br /><em>Go further with Plus.</em></h2></div>
-            <p>Both plans include focus timers, reminders, and a five-minute override. Internet access is required. Music plays on the pause page when enabled.</p>
+            <p>Both plans include timed blocking with no early exit inside Vigil. Internet access is required. Music plays on the pause page when enabled.</p>
           </div>
           <div class="download-grid pricing-grid">
-            <article class="download-card"><div class="download-card-top"><span class="download-label">FREE</span></div><h3>$0</h3><p>Five active sites and the Vigil Mode music track. Create an account and sign in inside the extension.</p><a class="button button-light" href="#install">Download Vigil</a></article>
-            <article class="download-card plus-card"><div class="download-card-top"><span class="download-label">VIGIL PLUS</span></div><h3>$4.99 <small>/ month</small></h3><p>All your saved sites, within browser limits. Each pause randomly plays one of three tracks. Failed renewal removes Plus access; your five most-triggered sites from the last 30 days remain active.</p><a class="button button-light" href="/account">Start Plus</a></article>
+            <article class="download-card"><div class="download-card-top"><span class="download-label">FREE</span></div><h3>$0</h3><p>Five active sites, one focus session at a time, and the Vigil Mode music track. Create an account and sign in inside the extension.</p><a class="button button-light" href="#install">Download Vigil</a></article>
+            <article class="download-card plus-card"><div class="download-card-top"><span class="download-label">VIGIL PLUS</span></div><h3>$4.99 <small>/ month</small></h3><p>Up to five concurrent sessions, each with its own sites and timer. Block more sites within browser limits. Each pause randomly plays one of three tracks. Failed renewal removes Plus access; your five most-triggered sites from the last 30 days remain active.</p><a class="button button-light" href="/account">Start Plus</a></article>
           </div>
         </div>
       </section>
@@ -132,7 +132,7 @@ const installOptions = [
               <p class="eyebrow">A FIRST RELEASE, READY TO TRY</p>
               <h2>Bring a little<br /><em>quiet with you.</em></h2>
             </div>
-            <p>Vigil is an early test build. Install it in your desktop browser, choose a site, and try one focus session.</p>
+            <p>Download Vigil for Chrome, Brave, or Firefox. Install it in your desktop browser, choose a site, and try one focus session.</p>
           </div>
           <div class="download-grid">
             <article v-for="option in installOptions" :key="option.name" class="download-card">

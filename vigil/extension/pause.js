@@ -24,7 +24,7 @@ async function setupSound() {
 	const { focusSound } = await api.storage.local.get("focusSound");
 	if (!focusSound || sessionEndsAt <= Date.now()) return;
 	stopSound();
-	const result = await api.runtime.sendMessage({ type: "get-music" });
+	const result = await api.runtime.sendMessage({ type: "get-music", target });
 	if (result.error) throw new Error(result.error);
 	const latest = await api.storage.local.get(["focusSound", "accountStatus", "session"]);
 	if (!latest.focusSound || !latest.accountStatus?.online || !latest.session || sessionEndsAt <= Date.now()) return;
@@ -81,7 +81,8 @@ function setTargetLabel() {
 
 function renderTimer() {
 	const remaining = sessionEndsAt ? Math.max(0, Math.ceil((sessionEndsAt - Date.now()) / 1000)) : 0;
-	const minutes = String(Math.floor(remaining / 60)).padStart(2, "0");
+	const days = Math.floor(remaining / 86400);
+	const minutes = (days ? days + "d " : "") + String(Math.floor(remaining / 3600) % 24).padStart(2, "0") + ":" + String(Math.floor(remaining / 60) % 60).padStart(2, "0");
 	const seconds = String(remaining % 60).padStart(2, "0");
 	document.querySelector("#timer").textContent = sessionEndsAt ? minutes + ":" + seconds : "Ended";
 	if (!sessionEndsAt || remaining === 0) {
@@ -89,6 +90,7 @@ function renderTimer() {
 		soundButton.hidden = true;
 		document.querySelector("#focus-note").textContent = "Your focus session has ended. This site is available again.";
 		document.querySelector("#continue").disabled = false;
+		document.querySelector("#continue").textContent = "Open this site";
 		document.querySelector("#wait").disabled = true;
 		if (waitUntilSessionEnds) openTargetAfterSession();
 	}
@@ -97,7 +99,7 @@ function renderTimer() {
 function openTargetAfterSession() {
 	if (endNavigationPending || !(target.startsWith("https://") || target.startsWith("http://"))) return;
 	endNavigationPending = true;
-	api.runtime.sendMessage({ type: "get-state" }).then(state => {
+	api.runtime.sendMessage({ type: "get-state", target }).then(state => {
 		if (!state || !state.session) {
 			waitUntilSessionEnds = false;
 			location.replace(target);
@@ -113,7 +115,7 @@ function openTargetAfterSession() {
 
 setTargetLabel();
 api.runtime.sendMessage({ type: "pause-shown", target }).catch(() => {});
-api.runtime.sendMessage({ type: "get-state" }).then(state => {
+api.runtime.sendMessage({ type: "get-state", target }).then(state => {
 	if (state && state.session) {
 		sessionEndsAt = state.session.endsAt;
 		if (state.session.taskLabel) document.querySelector("#focus-note").textContent = "You planned to work on: " + state.session.taskLabel;
@@ -123,7 +125,7 @@ api.runtime.sendMessage({ type: "get-state" }).then(state => {
 }).catch(() => renderTimer());
 setInterval(renderTimer, 1000);
 setInterval(() => {
-	api.runtime.sendMessage({ type: "get-state" }).then(state => {
+	api.runtime.sendMessage({ type: "get-state", target }).then(state => {
 		if (!state.online || !state.session) {
 			stopSound();
 			sessionEndsAt = null;
@@ -149,14 +151,5 @@ document.querySelector("#continue").addEventListener("click", async event => {
 		location.replace(target);
 		return;
 	}
-	const button = event.currentTarget;
-	button.disabled = true;
-	document.querySelector("#error").textContent = "";
-	try {
-		const result = await api.runtime.sendMessage({ type: "continue-site", target });
-		if (result && result.error) throw new Error(result.error);
-	} catch (error) {
-		document.querySelector("#error").textContent = error.message || "Could not continue to this site.";
-		button.disabled = false;
-	}
+	// Access stays locked until all matching sessions end.
 });

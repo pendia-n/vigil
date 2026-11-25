@@ -33,8 +33,7 @@ async function refreshOnline() {
 		await api.storage.local.set({ accountStatus: { ...status, online: true, verifiedAt: Date.now(), error: "" } });
 	} catch (error) {
 		const { accountStatus } = await api.storage.local.get("accountStatus");
-		await api.storage.local.set({ accountStatus: { username: accountStatus?.username || "", online: false, plan: "free", error: error.message || "Connect to the internet to use Vigil." }, session: null });
-		await api.alarms.clear(SESSION_ALARM);
+		await api.storage.local.set({ accountStatus: { username: accountStatus?.username || "", online: false, plan: "free", error: error.message || "Connect to the internet to use Vigil." } });
 		await clearOverrides();
 	}
 	await syncBlockingRules();
@@ -68,8 +67,8 @@ function escapeRegex(value) {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function domainPattern(domain) {
-	return "*://*." + domain + "/*";
+function domainPatterns(domain) {
+	return ["http://*." + domain + "/*", "https://*." + domain + "/*"];
 }
 
 function domainRegex(domain) {
@@ -94,20 +93,22 @@ function normalizeDomain(value) {
 }
 
 async function getData() {
-	const data = await api.storage.local.get({ domains: [], session: null, stats: { sessions: 0, pauses: 0, overrides: 0 }, accountStatus: {}, triggers: {} });
+	const data = await api.storage.local.get({ domains: [], session: null, stats: { sessions: 0, pauses: 0, overrides: 0 }, accountStatus: {}, triggers: {}, sessions: null });
 	const domains = Array.isArray(data.domains) ? data.domains : [];
 	const account = data.accountStatus;
 	const online = account.online && Date.now() - account.verifiedAt < ONLINE_WINDOW_MS;
 	const plus = online && account.plan === "plus" && Number(account.paidUntil) > Date.now();
 	const activeDomains = plus ? domains : rankedSites(domains, data.triggers).slice(0, 5);
-	return { domains, activeDomains, session: data.session, stats: data.stats, account, online, plus };
+	const sessions = (Array.isArray(data.sessions) ? data.sessions : data.session ? [{ ...data.session, id: "legacy", domains: [...domains] }] : []).filter(session => session.endsAt > Date.now());
+	return { domains, activeDomains, sessions, session: sessions[0] || null, stats: data.stats, account, online, plus };
 }
 
 async function syncBlockingRules() {
 	const data = await getData();
 	const active = data.online && data.session && data.session.endsAt > Date.now();
-	const permitted = active ? await Promise.all(data.activeDomains.map(async domain => ({
-		domain, allowed: await api.permissions.contains({ origins: [domainPattern(domain)] })
+	const blockedDomains = data.activeDomains.filter(domain => data.sessions.some(session => session.domains.includes(domain)));
+	const permitted = active ? await Promise.all(blockedDomains.map(async domain => ({
+		domain, allowed: await api.permissions.contains({ origins: domainPatterns(domain) })
 	}))) : [];
 	const rules = permitted.filter(item => item.allowed).map(({ domain }, index) => ({
 		id: index + 1,
@@ -128,33 +129,59 @@ async function syncBlockingRules() {
 	});
 }
 
-async function finishSession() {
-	await api.storage.local.set({ session: null });
+async function scheduleSessions() {
+	const { sessions } = await getData();
 	await api.alarms.clear(SESSION_ALARM);
-	await clearOverrides();
-	await syncBlockingRules();
+	if (sessions.length) await api.alarms.create(SESSION_ALARM, { when: Math.min(...sessions.map(session => session.endsAt)) });
 }
 
 async function expireSessionIfNeeded() {
 	const data = await getData();
-	if (data.session && data.session.endsAt <= Date.now()) {
-		await finishSession();
-		return null;
+	const stored = await api.storage.local.get(["sessions", "session"]);
+	if (stored.session || JSON.stringify(stored.sessions || []) !== JSON.stringify(data.sessions)) {
+		await api.storage.local.set({ sessions: data.sessions, session: null });
 	}
+	await scheduleSessions();
+	await syncBlockingRules();
 	return data.session;
 }
 
-async function getState() {
-	const session = await expireSessionIfNeeded();
+async function assertUnlocked(domain) {
+	const { sessions } = await getData();
+	if (sessions.some(session => !domain || session.domains.includes(domain))) {
+		throw new Error("This focus commitment stays locked until its timer ends.");
+	}
+}
+
+async function getState(target = "") {
+	await expireSessionIfNeeded();
 	const data = await getData();
-	return { domains: data.domains, activeDomains: data.online ? data.activeDomains : [], session, stats: data.stats, online: Boolean(data.online), plan: data.plus ? "plus" : "free", username: data.account.username || "", connectionError: data.account.error || "", music: Boolean(data.account.music) };
+	let hostname;
+	try { hostname = new URL(target).hostname; } catch {}
+	const matching = hostname ? data.sessions.filter(session => session.domains.some(domain => hostname === domain || hostname.endsWith("." + domain))) : data.sessions;
+	const session = [...matching].sort((a, b) => b.endsAt - a.endsAt)[0] || null;
+	const { addError = "" } = await api.storage.local.get("addError");
+	return { domains: data.domains, activeDomains: data.online ? data.activeDomains : [], sessions: data.sessions, session, stats: data.stats, online: Boolean(data.online), plan: data.plus ? "plus" : "free", username: data.account.username || "", connectionError: data.account.error || "", music: Boolean(data.account.music), addError };
+}
+
+async function completePendingSites() {
+	const { pendingSites = {} } = await api.storage.local.get("pendingSites");
+	for (const [domain, created] of Object.entries(pendingSites)) {
+		if (Date.now() - created < 300000 && !(await api.permissions.contains({ origins: domainPatterns(domain) }))) continue;
+		try {
+			if (Date.now() - created < 300000) await addDomain(domain);
+			await api.storage.local.set({ addError: "" });
+		} catch (error) { await api.storage.local.set({ addError: error.message }); }
+		delete pendingSites[domain];
+	}
+	await api.storage.local.set({ pendingSites });
 }
 
 async function addDomain(value) {
 	await requireOnline();
 	const domain = normalizeDomain(value);
-	const pattern = domainPattern(domain);
-	const permission = await api.permissions.contains({ origins: [pattern] });
+	const patterns = domainPatterns(domain);
+	const permission = await api.permissions.contains({ origins: patterns });
 	if (!permission) throw new Error("Allow Vigil to access this site, then add it again.");
 	const data = await getData();
 	if (data.domains.includes(domain)) return getState();
@@ -169,6 +196,7 @@ async function addDomain(value) {
 
 async function removeDomain(value) {
 	const domain = normalizeDomain(value);
+	await assertUnlocked(domain);
 	const data = await getData();
 	const domains = data.domains.filter(item => item !== domain);
 	await api.storage.local.set({ domains });
@@ -176,7 +204,7 @@ async function removeDomain(value) {
 	const stillCovered = domains.some(item => item === domain || item.endsWith("." + domain) || domain.endsWith("." + item));
 	if (!stillCovered) {
 		try {
-			await api.permissions.remove({ origins: [domainPattern(domain)] });
+			await api.permissions.remove({ origins: domainPatterns(domain) });
 		} catch {
 			// A permission may already have been removed in browser settings.
 		}
@@ -185,6 +213,7 @@ async function removeDomain(value) {
 }
 
 async function clearLocalData() {
+	await assertUnlocked();
 	const data = await getData();
 	await api.storage.local.clear();
 	const alarms = await api.alarms.getAll();
@@ -199,7 +228,7 @@ async function clearLocalData() {
 	if (ids.length) await api.declarativeNetRequest.updateSessionRules({ removeRuleIds: ids });
 	if (data.domains.length) {
 		try {
-			await api.permissions.remove({ origins: data.domains.map(domainPattern) });
+			await api.permissions.remove({ origins: data.domains.flatMap(domainPatterns) });
 		} catch {
 			// Browser settings may have already changed these optional permissions.
 		}
@@ -207,20 +236,27 @@ async function clearLocalData() {
 	return getState();
 }
 
-async function startSession(minutes, taskLabel) {
+async function startSession(minutes, taskLabel, selectedDomains) {
 	const data = await requireOnline();
 	if (!data.domains.length) throw new Error("Add at least one site before starting a focus session.");
-	const duration = Math.max(5, Math.min(180, Number(minutes) || 25));
+	if (data.sessions.length >= (data.plus ? 5 : 1)) throw new Error(data.plus ? "Plus allows five concurrent sessions." : "Free allows one active session. Plus allows five.");
+	const duration = Number(minutes);
+	if (!Number.isFinite(duration) || duration < 1 || duration > 525600) throw new Error("Choose a duration between one minute and 365 days.");
+	if (selectedDomains !== undefined && !Array.isArray(selectedDomains)) throw new Error("Choose a valid site list.");
+	const domains = [...new Set(selectedDomains === undefined ? data.activeDomains : selectedDomains)];
+	if (!domains.length || domains.some(domain => !data.activeDomains.includes(domain))) throw new Error("Select at least one active saved site for this session.");
 	const now = Date.now();
 	const session = {
+		id: crypto.randomUUID(),
+		domains,
 		startedAt: now,
 		endsAt: now + duration * 60 * 1000,
 		durationMinutes: duration,
 		taskLabel: String(taskLabel || "").trim().slice(0, 80)
 	};
 	const stats = { ...data.stats, sessions: Number(data.stats.sessions || 0) + 1 };
-	await api.storage.local.set({ session, stats });
-	await api.alarms.create(SESSION_ALARM, { when: session.endsAt });
+	await api.storage.local.set({ sessions: [...data.sessions, session], session: null, stats });
+	await scheduleSessions();
 	await syncBlockingRules();
 	return getState();
 }
@@ -232,42 +268,10 @@ async function clearOverrideForTab(tabId) {
 	await api.alarms.clear(OVERRIDE_ALARM_PREFIX + tabId);
 }
 
-async function allowTargetForTab(target, tabId) {
-	await requireOnline();
-	if (!Number.isInteger(tabId) || tabId < 0) throw new Error("Could not identify this tab.");
-	const session = await expireSessionIfNeeded();
-	if (!session) throw new Error("The focus session has ended.");
-	let targetUrl;
-	try {
-		targetUrl = new URL(target);
-	} catch {
-		throw new Error("The return address is not valid.");
-	}
-	if (targetUrl.protocol !== "https:" && targetUrl.protocol !== "http:") throw new Error("Vigil can only continue to regular web sites.");
-	const data = await getData();
-	const domain = data.activeDomains.find(item => targetUrl.hostname === item || targetUrl.hostname.endsWith("." + item));
-	if (!domain) throw new Error("That site is not in your Vigil list.");
-	const existing = await api.declarativeNetRequest.getSessionRules();
-	const id = existing.reduce((next, rule) => Math.max(next, rule.id + 1), 100000);
-	await clearOverrideForTab(tabId);
-	await api.declarativeNetRequest.updateSessionRules({
-		addRules: [{
-			id,
-			priority: 100,
-			action: { type: "allow" },
-			condition: { regexFilter: domainRegex(domain), resourceTypes: ["main_frame"], tabIds: [tabId] }
-		}]
-	});
-	const stats = { ...data.stats, overrides: Number(data.stats.overrides || 0) + 1 };
-	await api.storage.local.set({ stats });
-	await api.alarms.create(OVERRIDE_ALARM_PREFIX + tabId, { when: Date.now() + 5 * 60 * 1000 });
-	await api.tabs.update(tabId, { url: targetUrl.href });
-	return { ok: true };
-}
-
 async function handleMessage(message, sender) {
 	const popup = sender.url === api.runtime.getURL("popup.html");
 	if (["login", "logout"].includes(message?.type) && !popup) throw new Error("Open Vigil to sign in.");
+	if (["login", "logout"].includes(message?.type)) await assertUnlocked();
 	if (message?.type === "login") {
 		const response = await serviceRequest("/api/extension/login", {
 			method: "POST", headers: { "content-type": "application/json" },
@@ -285,14 +289,14 @@ async function handleMessage(message, sender) {
 		return getState();
 	}
 	if (message?.type === "offline") {
-		await api.storage.local.set({ accountStatus: { online: false, error: "Connect to the internet to use Vigil." }, session: null });
+		await api.storage.local.set({ accountStatus: { online: false, error: "Connect to the internet to use Vigil." } });
 		await clearOverrides();
 		await syncBlockingRules();
 		return { ok: true };
 	}
 	if (message?.type === "get-music") {
 		const data = await requireOnline();
-		if (!data.session || data.session.endsAt <= Date.now()) throw new Error("Your focus session ended.");
+		if (!(await getState(message.target)).session) throw new Error("Your focus session ended.");
 		const response = await serviceRequest("/api/extension/music");
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		if (bytes.length > 8 * 1024 * 1024) throw new Error("This music file is too large.");
@@ -303,6 +307,23 @@ async function handleMessage(message, sender) {
 	switch (message && message.type) {
 		case "get-state":
 			await refreshOnline();
+			return getState(message.target);
+		case "prepare-site": {
+			if (!popup) throw new Error("Open Vigil to add a site.");
+			const domain = normalizeDomain(message.domain);
+			const { pendingSites = {} } = await api.storage.local.get("pendingSites");
+			pendingSites[domain] = Date.now();
+			await api.storage.local.set({ pendingSites, addError: "" });
+			return { ok: true };
+		}
+		case "cancel-site": {
+			const { pendingSites = {} } = await api.storage.local.get("pendingSites");
+			delete pendingSites[message.domain];
+			await api.storage.local.set({ pendingSites });
+			return { ok: true };
+		}
+		case "complete-sites":
+			await completePendingSites();
 			return getState();
 		case "add-domain":
 			return addDomain(message.domain);
@@ -311,9 +332,9 @@ async function handleMessage(message, sender) {
 		case "clear-data":
 			return clearLocalData();
 		case "start-session":
-			return startSession(message.minutes, message.taskLabel);
+			return startSession(message.minutes, message.taskLabel, message.domains);
 		case "end-session":
-			await finishSession();
+			await assertUnlocked();
 			return getState();
 		case "pause-shown": {
 			const data = await requireOnline();
@@ -341,7 +362,7 @@ async function handleMessage(message, sender) {
 			return { ok: true };
 		}
 		case "continue-site":
-			return allowTargetForTab(message.target, sender && sender.tab ? sender.tab.id : -1);
+			throw new Error("Sites stay blocked until every matching focus session ends.");
 		case "close-pause-tab": {
 			const tabId = sender && sender.tab ? sender.tab.id : -1;
 			if (!Number.isInteger(tabId) || tabId < 0) throw new Error("Could not identify this tab.");
@@ -369,16 +390,17 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
 api.alarms.onAlarm.addListener(alarm => {
 	enqueue(async () => {
 		if (alarm.name === STATUS_ALARM) { await refreshOnline(); await expireSessionIfNeeded(); }
-		else if (alarm.name === SESSION_ALARM) await finishSession();
+		else if (alarm.name === SESSION_ALARM) await expireSessionIfNeeded();
 		else if (alarm.name.startsWith(OVERRIDE_ALARM_PREFIX)) await clearOverrideForTab(Number(alarm.name.slice(OVERRIDE_ALARM_PREFIX.length)));
 	}).catch(() => {});
 });
 
 async function reconcile() {
 	await api.alarms.create(STATUS_ALARM, { periodInMinutes: 1 });
+	await clearOverrides();
 	await refreshOnline();
+	await completePendingSites();
 	const session = await expireSessionIfNeeded();
-	if (session) await api.alarms.create(SESSION_ALARM, { when: session.endsAt });
 	await syncBlockingRules();
 }
 
@@ -391,3 +413,5 @@ api.runtime.onStartup.addListener(() => {
 });
 
 api.permissions.onRemoved.addListener(() => { enqueue(syncBlockingRules).catch(() => {}); });
+
+api.permissions.onAdded.addListener(() => { enqueue(completePendingSites).catch(() => {}); });
