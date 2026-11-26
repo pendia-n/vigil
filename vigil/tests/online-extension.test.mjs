@@ -5,7 +5,7 @@ import vm from "node:vm";
 import { createHmac, createHash, webcrypto } from "node:crypto";
 import Stripe from "stripe";
 import { handleExtension } from "../server/extension.js";
-import { handleStripeWebhook } from "../server/billing.js";
+import { handleBilling, handleStripeWebhook } from "../server/billing.js";
 
 const background = await readFile(new URL("../extension/background.js", import.meta.url), "utf8");
 
@@ -240,4 +240,30 @@ test("Permission grant completes a durable pending addition without the popup", 
  assert.deepEqual(h.local.values.domains, ["youtube.com"]);
  assert.deepEqual(h.local.values.pendingSites, {});
  await h.run('completePendingSites()'); assert.equal(h.local.values.domains.length, 1);
+});
+
+
+test("Checkout confirmation verifies ownership and payment before granting Plus", async () => {
+ const fixture = serviceFixture();
+ fixture.state.account.stripe_customer_id = "cus_owned";
+ fixture.state.account.stripe_subscription_id = "sub_owned";
+ const originalFetch = globalThis.fetch;
+ let paid = false;
+ let customer = "cus_owned";
+ globalThis.fetch = async url => {
+  if (String(url).includes("checkout/sessions")) return Response.json({ id: "cs_owned", client_reference_id: "account-test", customer, status: "complete", payment_status: paid ? "paid" : "unpaid", subscription: "sub_owned" });
+  return Response.json({ id: "sub_owned", status: "active", latest_invoice: {status: "paid"}, items: {data: [{current_period_end: Math.floor(Date.now()/1000)+86400}]} });
+ };
+ const confirm = () => handleBilling(new Request("https://vigil.test/api/billing/confirm", {method:"POST", headers:fixture.request("status").headers, body:JSON.stringify({sessionId:"cs_owned"})}), fixture.env, "/api/billing/confirm");
+ try {
+  assert.equal((await (await confirm()).json()).confirmed, false);
+  assert.equal(fixture.state.updates.length, 0);
+  customer = "cus_other"; paid = true;
+  assert.equal((await confirm()).status, 403);
+  assert.equal(fixture.state.updates.length, 0);
+  customer = "cus_owned";
+  assert.equal((await (await confirm()).json()).confirmed, true);
+  const response = await handleExtension(fixture.request("status"), fixture.env, "/api/extension/status");
+  assert.equal((await response.json()).plan, "plus");
+ } finally { globalThis.fetch = originalFetch; }
 });

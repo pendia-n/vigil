@@ -10,11 +10,12 @@ const installOptions = [
   },
   {
     name: 'Chrome + Brave',
-    label: 'Chromium build',
-    description: 'Brave supports manual installation from this ZIP. Chrome users can load the unpacked build for testing; a store listing is needed for a simple public install.',
-    href: '/downloads/vigil-chrome-brave.zip',
-    action: 'Download for Chrome / Brave',
-    instructions: 'chrome://extensions or brave://extensions · Developer mode · Load unpacked',
+    label: 'Chrome Web Store',
+    description: 'Install Vigil from the Chrome Web Store in Chrome or Brave.',
+    href: 'https://chromewebstore.google.com/detail/vigil-%E2%80%94-focus-with-intent/ecaidjhmimmhbapjndogjoagdcnioido',
+    external: true,
+    action: 'Open Chrome Web Store',
+    instructions: 'Choose Add to Chrome or Add to Brave on the store page.',
   },
 ]
 </script>
@@ -139,7 +140,7 @@ const installOptions = [
               <div class="download-card-top"><span class="download-label">{{ option.label }}</span><span class="download-arrow" aria-hidden="true">↗</span></div>
               <h3>{{ option.name }}</h3>
               <p>{{ option.description }}</p>
-              <a class="button button-light" :href="option.href" :download="option.href.split('/').pop()">{{ option.action }}</a>
+              <a class="button button-light" :href="option.href" :target="option.external ? '_blank' : undefined" :rel="option.external ? 'noopener noreferrer' : undefined" :download="option.external ? undefined : option.href.split('/').pop()">{{ option.action }}</a>
               <div class="install-instructions"><span>QUICK INSTALL</span><code>{{ option.instructions }}</code></div>
             </article>
           </div>

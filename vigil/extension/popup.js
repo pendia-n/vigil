@@ -206,7 +206,7 @@ for (const selector of ["#duration", "#duration-value", "#duration-unit"]) {
 	$(selector).addEventListener("input", render);
 }
 refresh();
-setInterval(refresh, 30000);
+setInterval(refresh, 5000);
 setInterval(() => {
 	if (currentState.session && currentState.sessions?.length >= (currentState.plan === "plus" ? 5 : 1)) $("#timer").textContent = formatTime((currentState.session.endsAt - Date.now()) / 1000);
 	if (currentState.sessions?.some(session => session.endsAt <= Date.now())) refresh();

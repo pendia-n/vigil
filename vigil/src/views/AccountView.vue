@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 const mode = ref('login')
@@ -131,7 +131,27 @@ async function signOut() {
   try { await api('/api/auth/logout', {}) } finally { account.value = null; message.value = 'You are signed out.' }
 }
 
-onMounted(loadAccount)
+let accountTimer
+async function refreshBilling() {
+  const params = new URLSearchParams(location.search)
+  const sessionId = params.get('session_id')
+  if (params.get('checkout') === 'success' && sessionId) {
+    try {
+      const result = await api('/api/billing/confirm', { sessionId })
+      if (result.confirmed) {
+        history.replaceState(null, '', location.pathname)
+        message.value = 'Payment confirmed. Your Plus access is ready.'
+      }
+    } catch (cause) { error.value = cause.message }
+  }
+  await loadAccount()
+}
+onMounted(() => {
+  refreshBilling()
+  accountTimer = setInterval(() => { if (!document.hidden) refreshBilling() }, 5000)
+  window.addEventListener('focus', refreshBilling)
+})
+onUnmounted(() => { clearInterval(accountTimer); window.removeEventListener('focus', refreshBilling) })
 </script>
 
 <template>

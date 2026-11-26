@@ -37,6 +37,26 @@ export async function handleBilling(request, env, pathname) {
 	const stripe = stripeClient(env);
 	const origin = new URL(request.url).origin;
 
+	if (pathname === "/api/billing/confirm" && request.method === "POST") {
+		const body = await request.json().catch(() => ({}));
+		if (typeof body.sessionId !== "string" || !body.sessionId.startsWith("cs_")) return json({ error: "Invalid checkout session." }, 400);
+		const session = await stripe.checkout.sessions.retrieve(body.sessionId);
+		const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+		if (session.client_reference_id !== account.id || customerId !== account.stripe_customer_id) return json({ error: "This checkout belongs to another account." }, 403);
+		if (session.status !== "complete" || session.payment_status !== "paid") return json({ confirmed: false });
+		const id = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+		if (!id) return json({ confirmed: false });
+		if (account.stripe_subscription_id && account.stripe_subscription_id !== id) {
+			const previous = await stripe.subscriptions.retrieve(account.stripe_subscription_id);
+			const next = await stripe.subscriptions.retrieve(id);
+			if (previous.created >= next.created) return json({ confirmed: false });
+		}
+		await env.DB.prepare("UPDATE accounts SET subscription_status = CASE WHEN stripe_subscription_id IS NOT ? THEN 'incomplete' ELSE subscription_status END, stripe_subscription_id = ? WHERE id = ? AND stripe_customer_id = ?")
+			.bind(id, id, account.id, customerId).run();
+		await reconcileSubscription(env, { ...account, stripe_subscription_id: id }, stripe);
+		return json({ confirmed: true });
+	}
+
 	if (pathname === "/api/billing/checkout" && request.method === "POST") {
 		if (!env.STRIPE_WEBHOOK_SECRET) return json({ error: "Stripe webhook is not configured yet." }, 503);
 		if (account.subscription_status === "active" && Number(account.subscription_period_end || 0) > Date.now()) {
@@ -58,7 +78,7 @@ export async function handleBilling(request, env, pathname) {
 					quantity: 1
 				}],
 				subscription_data: { metadata: { vigil_account_id: account.id } },
-				success_url: `${origin}/account?checkout=success`,
+				success_url: `${origin}/account?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
 				cancel_url: `${origin}/account?checkout=cancelled`,
 				integration_identifier: integrationLabel()
 			});
