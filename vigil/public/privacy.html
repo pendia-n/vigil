@@ -5,16 +5,16 @@
 <title>Vigil privacy</title>
 <style>body{max-width:720px;margin:60px auto;padding:0 24px;font:17px/1.6 system-ui;color:#24212a}a{color:#713b85}</style>
 <h1>Vigil privacy</h1>
-<p>Updated November 23, 2026.</p>
+<p>Updated November 28, 2026.</p>
 <p>Vigil requires an account and an internet connection. Both Free and Plus connect to the Vigil service to verify your account and current subscription and to retrieve music.</p>
 <h2>Account and billing</h2>
 <p>Your username and password are sent over HTTPS to the Vigil service. The service stores a salted password hash, a recovery-code hash, session records, and subscription status in Cloudflare D1. The extension stores its sign-in token locally. Password changes and recovery revoke existing sessions.</p>
 <p>Stripe hosts payment checkout and billing management. Vigil stores Stripe customer and subscription identifiers and subscription events. Payment card details are handled by Stripe.</p>
 <h2>Sites and focus sessions</h2>
-<p>Your selected sites, focus goal, and per-site trigger counts stay in your browser. The extension uses browser request rules to pause selected sites during focus sessions. It does not send the sites you visit, page contents, or written focus goals to Vigil. The 30-day local trigger counts decide which five sites remain active after a downgrade. Other sites stay saved as inactive.</p>
+<p>Your selected sites, focus goal, and per-site trigger counts stay in your browser. The extension uses browser request rules to pause selected sites during focus sessions. For paid unlock offers, Vigil sends the intercepted blocked domain, identifiers for the browser installation and visit, and matching session identifiers and deadlines to the service. These records determine visit counts, checkout prices, and which sessions a payment releases. Written focus goals and page contents are not sent. The 30-day local trigger counts decide which five sites remain active after a downgrade. Other sites stay saved as inactive.</p>
 <h2>Music and connections</h2>
 <p>Music is stored in a private Cloudflare R2 bucket and delivered through authenticated Vigil requests. Free receives Vigil Mode. Plus receives a random track from three MP3s. The server receives the connection information needed to process requests. Authentication attempts use hashed rate-limit keys derived from connection information and, for sign-in, the username. Cloudflare may retain operational request logs.</p>
 <h2>Your controls</h2>
-<p>You can remove sites and their browser permissions, turn music off, sign out, and clear local extension data. Clearing local data signs the extension out and removes its local settings and counts. It does not delete your server account or cancel a subscription. Manage or cancel billing from your account page.</p>
+<p>Between active commitments, you can remove sites and their browser permissions, sign out, and clear local extension data. You can turn music off at any time. Delivered paid site unlocks have no self-service refund option. Statutory rights apply. Clearing local data signs the extension out and removes its local settings and counts. It does not delete your server account or cancel a subscription. Manage or cancel billing from your account page.</p>
 <p><a href="/account">Manage your Vigil account</a> · <a href="/">Back to Vigil</a></p>
 </html>

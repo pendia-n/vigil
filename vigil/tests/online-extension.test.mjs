@@ -117,7 +117,7 @@ test("Repeated pause messages count once and preserve per-site trigger totals", 
 	const h = harness();
 	await h.run('addDomain("netflix.com")');
 	await h.run('startSession(25, "Work")');
-	const message = 'handleMessage({type:"pause-shown", target:"https://www.netflix.com"}, {tab:{id:7}})';
+	const message = 'handleMessage({type:"pause-shown", target:"https://www.netflix.com", attemptId:"visit-one"}, {tab:{id:7}})';
 	await h.run(message);
 	await h.run(message);
 	assert.equal(h.local.values.triggers["netflix.com"][0].count, 1);
@@ -266,4 +266,22 @@ test("Checkout confirmation verifies ownership and payment before granting Plus"
   const response = await handleExtension(fixture.request("status"), fixture.env, "/api/extension/status");
   assert.equal((await response.json()).plan, "plus");
  } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test("A paid release removes only its domain from existing sessions and future sessions block it again", async () => {
+ const h = harness(); h.plan = "plus";
+ await h.run('addDomain("reddit.com")'); await h.run('addDomain("youtube.com")');
+ await h.run('startSession(60, "One", ["reddit.com", "youtube.com"])');
+ await h.run('startSession(90, "Two", ["reddit.com"])');
+ h.local.values.unlockReleases = [{domain: "reddit.com", sessionIds: h.local.values.sessions.map(session => session.id)}];
+ await h.run('syncBlockingRules()');
+ assert.equal(h.rules().length, 1); assert.match(h.rules()[0].condition.regexFilter, /youtube/);
+ assert.equal((await h.run('getState("https://reddit.com")')).session, null);
+ assert.equal(h.local.values.domains.length, 2);
+ // Start invokes online refresh. This mock service returns the same confirmed release.
+ const releases = h.local.values.unlockReleases;
+ await h.run('startSession(30, "New", ["reddit.com"])');
+ h.local.values.unlockReleases = releases;
+ await h.run('syncBlockingRules()'); assert.equal(h.rules().length, 2);
 });

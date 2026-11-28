@@ -24,6 +24,37 @@ async function serviceRequest(path, options = {}) {
 	return response;
 }
 
+async function installationId() {
+	let { installationId } = await api.storage.local.get("installationId");
+	if (!installationId) {
+		installationId = crypto.randomUUID();
+		await api.storage.local.set({ installationId });
+	}
+	return installationId;
+}
+function released(session, domain, releases) {
+	return (releases || []).some(release => release.domain === domain && release.sessionIds.includes(session.id));
+}
+async function syncUnlocks() {
+	const id = await installationId();
+	const { unlockOrders = [] } = await api.storage.local.get("unlockOrders");
+	for (const orderId of unlockOrders) {
+		const response = await serviceRequest("/api/extension/unlock/confirm", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({installation: id, orderId})});
+		const result = await response.json();
+		if (result.status !== "pending" || result.expiresAt <= Date.now()) {
+			const latest = await api.storage.local.get({unlockOrders: []});
+			await api.storage.local.set({unlockOrders: latest.unlockOrders.filter(value => value !== orderId)});
+		}
+	}
+	const response = await serviceRequest("/api/extension/unlock/releases?installation=" + encodeURIComponent(id));
+	const { releases = [] } = await response.json();
+	await api.storage.local.set({ unlockReleases: releases });
+}
+async function unlockAction(path, body) {
+	const response = await serviceRequest("/api/extension/unlock/" + path, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({installation: await installationId(), ...body})});
+	return response.json();
+}
+
 async function refreshOnline() {
 	const { accessToken } = await api.storage.local.get("accessToken");
 	try {
@@ -36,6 +67,7 @@ async function refreshOnline() {
 		await api.storage.local.set({ accountStatus: { username: accountStatus?.username || "", online: false, plan: "free", error: error.message || "Connect to the internet to use Vigil." } });
 		await clearOverrides();
 	}
+	try { await syncUnlocks(); } catch { /* Keep existing blocking if payment checks are unavailable. */ }
 	await syncBlockingRules();
 }
 
@@ -93,20 +125,20 @@ function normalizeDomain(value) {
 }
 
 async function getData() {
-	const data = await api.storage.local.get({ domains: [], session: null, stats: { sessions: 0, pauses: 0, overrides: 0 }, accountStatus: {}, triggers: {}, sessions: null });
+	const data = await api.storage.local.get({ domains: [], session: null, stats: { sessions: 0, pauses: 0, overrides: 0 }, accountStatus: {}, triggers: {}, sessions: null, unlockReleases: [] });
 	const domains = Array.isArray(data.domains) ? data.domains : [];
 	const account = data.accountStatus;
 	const online = account.online && Date.now() - account.verifiedAt < ONLINE_WINDOW_MS;
 	const plus = online && account.plan === "plus" && Number(account.paidUntil) > Date.now();
 	const activeDomains = plus ? domains : rankedSites(domains, data.triggers).slice(0, 5);
 	const sessions = (Array.isArray(data.sessions) ? data.sessions : data.session ? [{ ...data.session, id: "legacy", domains: [...domains] }] : []).filter(session => session.endsAt > Date.now());
-	return { domains, activeDomains, sessions, session: sessions[0] || null, stats: data.stats, account, online, plus };
+	return { domains, activeDomains, sessions, releases: data.unlockReleases, session: sessions[0] || null, stats: data.stats, account, online, plus };
 }
 
 async function syncBlockingRules() {
 	const data = await getData();
 	const active = data.online && data.session && data.session.endsAt > Date.now();
-	const blockedDomains = data.activeDomains.filter(domain => data.sessions.some(session => session.domains.includes(domain)));
+	const blockedDomains = data.activeDomains.filter(domain => data.sessions.some(session => session.domains.includes(domain) && !released(session, domain, data.releases)));
 	const permitted = active ? await Promise.all(blockedDomains.map(async domain => ({
 		domain, allowed: await api.permissions.contains({ origins: domainPatterns(domain) })
 	}))) : [];
@@ -158,7 +190,7 @@ async function getState(target = "") {
 	const data = await getData();
 	let hostname;
 	try { hostname = new URL(target).hostname; } catch {}
-	const matching = hostname ? data.sessions.filter(session => session.domains.some(domain => hostname === domain || hostname.endsWith("." + domain))) : data.sessions;
+	const matching = hostname ? data.sessions.filter(session => session.domains.some(domain => (hostname === domain || hostname.endsWith("." + domain)) && !released(session, domain, data.releases))) : data.sessions;
 	const session = [...matching].sort((a, b) => b.endsAt - a.endsAt)[0] || null;
 	const { addError = "" } = await api.storage.local.get("addError");
 	return { domains: data.domains, activeDomains: data.online ? data.activeDomains : [], sessions: data.sessions, session, stats: data.stats, online: Boolean(data.online), plan: data.plus ? "plus" : "free", username: data.account.username || "", connectionError: data.account.error || "", music: Boolean(data.account.music), addError };
@@ -336,30 +368,40 @@ async function handleMessage(message, sender) {
 		case "end-session":
 			await assertUnlocked();
 			return getState();
+		case "unlock-checkout": {
+			const hostname = new URL(message.target).hostname;
+			const data = await requireOnline();
+			const domain = data.activeDomains.find(domain => hostname === domain || hostname.endsWith("." + domain));
+			if (!domain) throw new Error("That site is not blocked.");
+			const result = await unlockAction("checkout", {domain});
+			const { unlockOrders = [] } = await api.storage.local.get("unlockOrders");
+			await api.storage.local.set({unlockOrders: [...new Set([...unlockOrders, result.orderId])]});
+			await api.tabs.create({url: result.url});
+			return {ok: true};
+		}
 		case "pause-shown": {
 			const data = await requireOnline();
 			let hostname;
-			try { hostname = new URL(message.target).hostname; } catch { return { ok: false }; }
-			if (!data.session || data.session.endsAt <= Date.now()) return { ok: false };
-			const domain = data.activeDomains.find(item => hostname === item || hostname.endsWith("." + item));
-			if (!domain) return { ok: false };
-			const tabId = sender.tab?.id;
-			const marker = "pauseSeen:" + tabId;
+			try { hostname = new URL(message.target).hostname; } catch { return {ok: false}; }
+			const domain = data.activeDomains.find(domain => hostname === domain || hostname.endsWith("." + domain));
+			const sessions = domain ? data.sessions.filter(session => session.domains.includes(domain) && !released(session, domain, data.releases)) : [];
+			if (!sessions.length) return {ok: false};
+			const attemptId = sender.documentId || message.attemptId;
+			if (!attemptId) throw new Error("Could not identify this visit.");
+			const offer = await unlockAction("attempt", {domain, attemptId, sessions: sessions.map(session => ({id: session.id, endsAt: session.endsAt}))});
+			const marker = "pauseSeen:" + (sender.tab?.id || "") + ":" + domain;
 			const seen = (await api.storage.session.get(marker))[marker];
-			if (seen && seen.domain === domain && Date.now() - seen.at < 10000) return { ok: true };
-			await api.storage.session.set({ [marker]: { domain, at: Date.now() } });
-			const { triggers = {} } = await api.storage.local.get("triggers");
+			if (seen === attemptId) return offer;
+			await api.storage.session.set({[marker]: attemptId});
+			const {triggers = {}} = await api.storage.local.get("triggers");
 			const now = Date.now();
 			const day = Math.floor(now / 86400000) * 86400000;
 			const entries = (triggers[domain] || []).filter(entry => entry.day >= now - HISTORY_MS);
 			let entry = entries.find(entry => entry.day === day);
-			if (!entry) { entry = { day, count: 0, last: now }; entries.push(entry); }
-			entry.count++;
-			entry.last = now;
-			triggers[domain] = entries;
-			const stats = { ...data.stats, pauses: Number(data.stats.pauses || 0) + 1 };
-			await api.storage.local.set({ stats, triggers });
-			return { ok: true };
+			if (!entry) { entry = {day, count: 0, last: now}; entries.push(entry); }
+			entry.count++; entry.last = now; triggers[domain] = entries;
+			await api.storage.local.set({triggers, stats: {...data.stats, pauses: Number(data.stats.pauses || 0) + 1}});
+			return offer;
 		}
 		case "continue-site":
 			throw new Error("Sites stay blocked until every matching focus session ends.");

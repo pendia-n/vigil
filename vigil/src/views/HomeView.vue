@@ -1,14 +1,6 @@
 <script setup>
 const installOptions = [
   {
-    name: 'Firefox',
-    label: 'Firefox build',
-    description: 'Download the Firefox package for testing or store submission. Public installation requires Mozilla signing.',
-    href: '/downloads/vigil-firefox.zip',
-    action: 'Download for Firefox',
-    instructions: 'about:debugging · This Firefox · Load Temporary Add-on · manifest.json',
-  },
-  {
     name: 'Chrome + Brave',
     label: 'Chrome Web Store',
     description: 'Install Vigil from the Chrome Web Store in Chrome or Brave.',
@@ -72,7 +64,7 @@ const installOptions = [
         <div class="section-index"><span>01</span><span class="index-line"></span><span>THE PRACTICE</span></div>
         <div class="statement-content">
           <h2>Not another willpower test.<br /><span>Block distractions for the time you choose.</span></h2>
-          <p>Choose the sites and end time before you start. Once the timer starts, Vigil gives you a pause page and a way back to your task.</p>
+          <p>Choose the sites and end time before you start. Once the timer starts, Vigil gives you a pause page and a way back to your task. After repeated visits, you can choose a separate paid site unlock.</p>
         </div>
       </section>
 
@@ -117,7 +109,7 @@ const installOptions = [
         <div class="page-wrap install-wrap">
           <div class="install-heading">
             <div><p class="eyebrow">SIMPLE PLANS</p><h2>Start free.<br /><em>Go further with Plus.</em></h2></div>
-            <p>Both plans include timed blocking with no early exit inside Vigil. Internet access is required. Music plays on the pause page when enabled.</p>
+            <p>Both plans include timed blocking with optional paid site unlocks. A site unlock costs $3 on visits 2–5 and $1.40 from visit 6. It releases that site from current sessions and leaves other sites blocked. Internet access is required. Music plays on the pause page when enabled.</p>
           </div>
           <div class="download-grid pricing-grid">
             <article class="download-card"><div class="download-card-top"><span class="download-label">FREE</span></div><h3>$0</h3><p>Five active sites, one focus session at a time, and the Vigil Mode music track. Create an account and sign in inside the extension.</p><a class="button button-light" href="#install">Download Vigil</a></article>
@@ -133,7 +125,7 @@ const installOptions = [
               <p class="eyebrow">A FIRST RELEASE, READY TO TRY</p>
               <h2>Bring a little<br /><em>quiet with you.</em></h2>
             </div>
-            <p>Download Vigil for Chrome, Brave, or Firefox. Install it in your desktop browser, choose a site, and try one focus session.</p>
+            <p>Install Vigil in Chrome or Brave. Install it in your desktop browser, choose a site, and try one focus session.</p>
           </div>
           <div class="download-grid">
             <article v-for="option in installOptions" :key="option.name" class="download-card">

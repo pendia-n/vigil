@@ -51,7 +51,7 @@ function render() {
 	const atLimit = sessions.length >= (currentState.plan === "plus" ? 5 : 1);
 	$("#session-actions").classList.toggle("hidden", atLimit);
 	$("#locked-note").hidden = !active;
-	$("#locked-note").textContent = "Active commitments cannot be ended early. " + (currentState.plan === "plus" ? sessions.length + " / 5 sessions active." : "Free allows one active session.");
+	$("#locked-note").textContent = "Active commitments stay locked. Separate paid site unlocks are offered after repeated visits. " + (currentState.plan === "plus" ? sessions.length + " / 5 sessions active." : "Free allows one active session.");
 	$("#logout").disabled = Boolean(active);
 	$("#clear-data").disabled = Boolean(active);
 	$("#active-sessions").replaceChildren();
@@ -144,7 +144,7 @@ $("#start").addEventListener("click", async () => {
 	try {
 		const minutes = selectedMinutes();
 		if (!Number.isFinite(minutes) || minutes < 1 || minutes > 525600) throw new Error("Choose one minute to 365 days.");
-		if (!window.confirm("Block the selected sites for " + formatTime(minutes * 60) + "? You cannot end this session early.")) return;
+		if (!window.confirm("Block the selected sites for " + formatTime(minutes * 60) + "? A separate paid site unlock becomes available after repeated visits.")) return;
 		currentState = await send("start-session", {
 			minutes: selectedMinutes(),
 			domains: (currentState.activeDomains || []).filter(domain => selectedSites.has(domain)),

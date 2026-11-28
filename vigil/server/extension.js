@@ -1,5 +1,6 @@
 import { authenticatedAccount, handleAuth } from "./auth.js";
-import { reconcileSubscription } from "./billing.js";
+import { handleUnlock } from "./unlocks.js";
+import { reconcileSubscription, stripeClient } from "./billing.js";
 
 const tracks = [
 	{ key: "VIGIL_MODE_Cybernetic_Serenade.mp3", title: "Vigil Mode — Cybernetic Serenade" },
@@ -30,6 +31,10 @@ export async function handleExtension(request, env, pathname) {
 	}
 	let account = await authenticatedAccount(request, env);
 	if (!account) return json({ error: "Your connection expired. Sign in again." }, 401);
+	if (pathname.startsWith("/api/extension/unlock/")) {
+		if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) return json({error: "Unlock payments are unavailable."}, 503);
+		return handleUnlock(request, env, account, stripeClient(env));
+	}
 	if (account.stripe_customer_id && Date.now() - Number(account.billing_checked_at || 0) >= 60000) {
 		try {
 			await reconcileSubscription(env, account);

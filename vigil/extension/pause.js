@@ -1,6 +1,7 @@
 const api = globalThis.browser || globalThis.chrome;
 const target = location.hash.length > 1 ? location.href.slice(location.href.indexOf("#") + 1) : "";
 let sessionEndsAt = null;
+let stateReady = false;
 let waitUntilSessionEnds = false;
 let endNavigationPending = false;
 let focusAudio;
@@ -80,6 +81,7 @@ function setTargetLabel() {
 }
 
 function renderTimer() {
+	if (!stateReady) return;
 	const remaining = sessionEndsAt ? Math.max(0, Math.ceil((sessionEndsAt - Date.now()) / 1000)) : 0;
 	const days = Math.floor(remaining / 86400);
 	const minutes = (days ? days + "d " : "") + String(Math.floor(remaining / 3600) % 24).padStart(2, "0") + ":" + String(Math.floor(remaining / 60) % 60).padStart(2, "0");
@@ -88,7 +90,9 @@ function renderTimer() {
 	if (!sessionEndsAt || remaining === 0) {
 		focusAudio?.pause();
 		soundButton.hidden = true;
-		document.querySelector("#focus-note").textContent = "Your focus session has ended. This site is available again.";
+		document.querySelector("#unlock").hidden = true;
+		document.querySelector("#unlock-note").hidden = true;
+		document.querySelector("#focus-note").textContent = "This site is available. Other active focus commitments continue.";
 		document.querySelector("#continue").disabled = false;
 		document.querySelector("#continue").textContent = "Open this site";
 		document.querySelector("#wait").disabled = true;
@@ -114,8 +118,28 @@ function openTargetAfterSession() {
 }
 
 setTargetLabel();
-api.runtime.sendMessage({ type: "pause-shown", target }).catch(() => {});
+const attemptId = crypto.randomUUID();
+api.runtime.sendMessage({ type: "pause-shown", target, attemptId }).then(offer => {
+	if (offer.error) throw new Error(offer.error);
+	document.querySelector("#attempts").textContent = offer.attempts ? "Visit " + offer.attempts + " during this session" : "";
+	if (offer.amount) {
+		document.querySelector("#unlock").hidden = false;
+		document.querySelector("#unlock-note").hidden = false;
+		document.querySelector("#unlock").textContent = "Unlock this site — $" + (offer.amount / 100).toFixed(2);
+	}
+}).catch(error => { document.querySelector("#error").textContent = error.message; });
+document.querySelector("#unlock").addEventListener("click", async event => {
+	event.currentTarget.disabled = true;
+	try {
+		const result = await api.runtime.sendMessage({type: "unlock-checkout", target});
+		if (result.error) throw new Error(result.error);
+		document.querySelector("#error").textContent = "Complete payment in the new tab. This page will update automatically.";
+	} catch (error) { document.querySelector("#error").textContent = error.message; }
+	finally { document.querySelector("#unlock").disabled = false; }
+});
 api.runtime.sendMessage({ type: "get-state", target }).then(state => {
+	if (state.error) throw new Error(state.error);
+	stateReady = true;
 	if (state && state.session) {
 		sessionEndsAt = state.session.endsAt;
 		if (state.session.taskLabel) document.querySelector("#focus-note").textContent = "You planned to work on: " + state.session.taskLabel;
@@ -129,10 +153,10 @@ setInterval(() => {
 		if (!state.online || !state.session) {
 			stopSound();
 			sessionEndsAt = null;
-			document.querySelector("#error").textContent = state.connectionError || "Your focus session ended.";
+			document.querySelector("#error").textContent = state.connectionError || "This site is now available.";
 		} else sessionEndsAt = state.session.endsAt;
 	}).catch(stopSound);
-}, 30000);
+}, 5000);
 
 document.querySelector("#return").addEventListener("click", () => {
 	if (history.length > 1) history.back();

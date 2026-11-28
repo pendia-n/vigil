@@ -1,3 +1,4 @@
+import { unlockEvent } from "./unlocks.js";
 import Stripe from "stripe";
 import { authenticatedAccount } from "./auth.js";
 
@@ -5,7 +6,7 @@ function json(data, status = 200) {
 	return Response.json(data, { status });
 }
 
-function stripeClient(env) {
+export function stripeClient(env) {
 	if (!env.STRIPE_SECRET_KEY) throw new Error("Stripe is not configured.");
 	return new Stripe(env.STRIPE_SECRET_KEY, {
 		apiVersion: "2026-09-30.endive",
@@ -100,7 +101,15 @@ export async function handleBilling(request, env, pathname) {
 			return json({ error: "There is no active paid subscription to refund." }, 409);
 		}
 		const charges = await stripe.charges.list({ customer: account.stripe_customer_id, limit: 10 });
-		const latestCharge = charges.data.find(charge => charge.paid && charge.status === "succeeded" && charge.amount_refunded < charge.amount);
+		let latestCharge;
+		for (const charge of charges.data) {
+			if (!charge.paid || charge.status !== "succeeded" || charge.amount_refunded >= charge.amount) continue;
+			const intentId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+			const payment = intentId ? await stripe.paymentIntents.retrieve(intentId) : null;
+			if (charge.metadata?.purchase_type === "domain_unlock" || payment?.metadata?.purchase_type === "domain_unlock") continue;
+			latestCharge = charge;
+			break;
+		}
 		if (!latestCharge) {
 			return json({ error: "A 30% refund is only available within 24 hours of a successful charge." }, 409);
 		}
@@ -173,6 +182,7 @@ export async function reconcileSubscription(env, account, stripe = stripeClient(
 }
 
 async function applyEvent(event, env, stripe) {
+	if (await unlockEvent(event, env, stripe)) return;
 	const object = event.data.object;
 	if (event.type.startsWith("customer.subscription.")) {
 		const customerId = typeof object.customer === "string" ? object.customer : object.customer?.id;
