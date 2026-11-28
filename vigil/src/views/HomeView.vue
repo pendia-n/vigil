@@ -96,7 +96,7 @@ const installOptions = [
         <div class="privacy-copy">
           <p class="eyebrow">PRIVATE BY DEFAULT</p>
           <h2>Your focus belongs<br /><em>to you.</em></h2>
-          <p>Vigil checks your account and subscription online and loads music from private storage. Your selected sites, focus goal, and recent trigger counts stay in your browser.</p>
+          <p>Vigil checks your account online and loads music from private storage. Your focus goal stays in your browser. Blocked-site visits and session identifiers are sent to Vigil to count attempts and verify paid unlocks.</p>
         </div>
         <ul class="privacy-points">
           <li><span>01</span><span>Only the sites you choose</span></li>
@@ -125,7 +125,7 @@ const installOptions = [
               <p class="eyebrow">A FIRST RELEASE, READY TO TRY</p>
               <h2>Bring a little<br /><em>quiet with you.</em></h2>
             </div>
-            <p>Install Vigil in Chrome or Brave. Install it in your desktop browser, choose a site, and try one focus session.</p>
+            <p>Install Vigil in Chrome or Brave, choose a site, and start a focus session.</p>
           </div>
           <div class="download-grid">
             <article v-for="option in installOptions" :key="option.name" class="download-card">
